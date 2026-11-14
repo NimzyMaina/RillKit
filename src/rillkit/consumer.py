@@ -135,6 +135,11 @@ class Subscriber:
     def heartbeat_key(self) -> str:
         return self.broker.keys.heartbeat(self.stream, self.group, self.consumer)
 
+    @property
+    def registry_key(self) -> str:
+        """The sorted set of live consumers of this stream and group (``active_workers``)."""
+        return self.broker.keys.consumers(self.stream, self.group)
+
     # lifecycle
 
     def setup(self) -> None:
@@ -196,7 +201,10 @@ class Subscriber:
         finally:
             if self.heartbeat:
                 try:
-                    self.client.delete(self.heartbeat_key)
+                    pipe = self.client.pipeline(transaction=False)
+                    pipe.delete(self.heartbeat_key)
+                    pipe.zrem(self.registry_key, self.consumer)
+                    pipe.execute()
                 except Exception as e:
                     log.error("could not remove heartbeat key: %s", e)
             log.info(
@@ -210,8 +218,14 @@ class Subscriber:
     def _beat(self) -> None:
         if not self.heartbeat:
             return
+        now = time.time()
         try:
-            self.client.set(self.heartbeat_key, int(time.time()), ex=self.heartbeat_ttl)
+            pipe = self.client.pipeline(transaction=False)
+            pipe.set(self.heartbeat_key, int(now), ex=self.heartbeat_ttl)
+            # the registry: this consumer is alive until now + ttl; drop entries already expired
+            pipe.zadd(self.registry_key, {self.consumer: int((now + self.heartbeat_ttl) * 1000)})
+            pipe.zremrangebyscore(self.registry_key, "-inf", int(now * 1000))
+            pipe.execute()
         except Exception as e:
             log.error("heartbeat failed: %s", e)
 

@@ -10,7 +10,8 @@ its DLQ and its heartbeats in one hash slot so the move to the DLQ can stay a tr
 Reserved for planned control-plane keys (worker state, directive dedup, node heartbeats, logs and
 producer cordons), so that adding them never moves or collides with existing keys:
 
-- ``PlainKeys``: names under ``rillkit:`` other than ``rillkit:workers:`` and ``rillkit:done:``,
+- ``PlainKeys``: names under ``rillkit:`` other than ``rillkit:workers:``, ``rillkit:done:`` and
+  ``rillkit:consumers:``,
   namely ``rillkit:state:``, ``rillkit:dedup:``, ``rillkit:nodes:``, ``rillkit:ctl:``,
   ``rillkit:logs:`` and ``rillkit:cordon:``.
 - ``HashTagKeys``: the control tag ``{<tenant>:}`` (``{:}`` without a tenant) inside each
@@ -25,6 +26,7 @@ from .stream import Stream
 
 HEARTBEAT_PREFIX = "rillkit:workers:"
 IDEMPOTENCY_PREFIX = "rillkit:done:"
+CONSUMERS_PREFIX = "rillkit:consumers:"
 _GLOB_SPECIAL = str.maketrans({c: f"\\{c}" for c in "*?[]\\"})
 
 
@@ -60,6 +62,12 @@ class KeyBuilder:
         it keep their existing markers."""
         return f"{IDEMPOTENCY_PREFIX}{stream.name}:{key}"
 
+    def consumers(self, stream: Stream, group: str) -> str:
+        """The registry of live consumers of ``stream`` in ``group``: a sorted set of consumer
+        names scored by when their heartbeat expires (milliseconds). ``active_workers`` reads it,
+        so finding workers never needs ``SCAN``."""
+        return f"{CONSUMERS_PREFIX}{_escape_plain(stream.name)}:{group}"
+
 
 class PlainKeys(KeyBuilder):
     """The stream name is the key; the DLQ is ``dlq`` or ``<name>-dlq``. rillkit's original layout.
@@ -81,6 +89,11 @@ class PlainKeys(KeyBuilder):
         return "PlainKeys()"
 
 
+def _escape_plain(text: str) -> str:
+    """Encode ``%`` and ``:`` so a stream name never runs into the group name after it."""
+    return text.replace("%", "%25").replace(":", "%3A")
+
+
 def _escape(text: str, colon: bool = False) -> str:
     """Percent-encode the characters that would end or split a hash tag."""
     out = text.replace("%", "%25").replace("{", "%7B").replace("}", "%7D")
@@ -94,6 +107,7 @@ class HashTagKeys(KeyBuilder):
         rk:{orders}:dlq                 (or rk:{orders}:dlq:<custom name>)
         rk:{orders}:workers:<group>:<consumer>
         rk:{orders}:done:<idempotency key>
+        rk:{orders}:consumers:<group>   (registry of live consumers)
 
     ``tenant`` adds an opaque id inside the tag (``rk:{t-42:orders}:stream``) so tenants' keys
     never collide. It is for placement and naming only, not access control: take it from trusted
@@ -140,6 +154,9 @@ class HashTagKeys(KeyBuilder):
 
     def idempotency(self, stream: Stream, key: str) -> str:
         return f"{self._base(stream)}:done:{key}"
+
+    def consumers(self, stream: Stream, group: str) -> str:
+        return f"{self._base(stream)}:consumers:{group}"
 
     def __repr__(self) -> str:
         return f"HashTagKeys(prefix={self.prefix!r}, tenant={self.tenant!r})"

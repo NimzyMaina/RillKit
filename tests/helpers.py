@@ -34,6 +34,11 @@ def hk(stream: StreamLike, group: str, consumer: str) -> str:
     return KEYS.heartbeat(as_stream(stream), group, consumer)
 
 
+def ck(stream: StreamLike, group: str) -> str:
+    """Physical key of the consumer registry of a stream and group."""
+    return KEYS.consumers(as_stream(stream), group)
+
+
 def ik(stream: StreamLike, key: str) -> str:
     """Physical key of an Idempotent marker."""
     return KEYS.idempotency(as_stream(stream), key)

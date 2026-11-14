@@ -76,7 +76,7 @@ def test_plain_keys_on_a_cluster_dead_letter_in_two_ordered_steps(
         broker.stop(5)
 
 
-def test_active_workers_scans_every_primary(server_settings, r, name):
+def test_active_workers_finds_consumers_on_every_primary(server_settings, r, name):
     broker = Broker(settings=server_settings(key_layout="plain"))
     consumers = [f"c{i}" for i in range(12)]
     for c in consumers:
@@ -89,7 +89,7 @@ def test_active_workers_scans_every_primary(server_settings, r, name):
         assert len(owners) > 1  # the keys really are spread over several primaries
     finally:
         broker.stop(5)
-    assert broker.active_workers(name, "g") == []
+    assert Broker(client=r, keys=PlainKeys()).active_workers(name, "g") == []
 
 
 def test_active_workers_on_an_empty_cluster_stream(broker, name):
