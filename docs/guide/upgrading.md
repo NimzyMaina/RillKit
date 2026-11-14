@@ -17,7 +17,8 @@ New, all optional:
 
 - `pip install "rillkit[valkey]"` and `Settings(backend="valkey")` (or `RILLKIT_BACKEND=valkey`) to use valkey-py.
 - `Settings(mode="cluster", cluster_nodes=[...])` (or `RILLKIT_MODE=cluster`) for Redis Cluster and Valkey Cluster. See [Redis and Valkey Cluster](/guide/cluster).
-- `RILLKIT_URL`, which wins over `REDIS_URL`; `REDIS_USERNAME` for ACL users.
+- Key builders that map logical stream names to physical keys, with prefixes and tenants. See [Keys](/guide/keys).
+- `RILLKIT_URL`, `RILLKIT_BACKEND`, `RILLKIT_MODE`, `RILLKIT_CLUSTER_NODES` and `RILLKIT_KEY_LAYOUT`. `RILLKIT_URL` wins over `REDIS_URL`; moving to it is optional. `REDIS_USERNAME` is new for ACL users.
 - `Settings(username=..., client_kwargs={...})` to pass any client option.
 - `Broker(keys=...)`, `broker.keys`, `msg.key`, and `PlainKeys`, `HashTagKeys`, `KeyBuilder`.
 - `ConfigurationError` for bad settings.

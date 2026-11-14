@@ -46,6 +46,6 @@ Skips messages whose key was already processed successfully.
 | --- | --- | --- |
 | `key` | required | Returns the idempotency key for a message, for example `lambda m: m.body["request_id"]`. |
 | `ttl` | `604800` | Seconds the done-marker is kept. |
-| `prefix` | `"rillkit:done:"` | Redis key prefix. The full key is `<prefix><stream name>:<key>`. |
+| `prefix` | `"rillkit:done:"` | Key prefix. The full key is `<prefix><stream name>:<key>`. |
 
 Behaviour: if the key exists, it raises `AckMessage` (the duplicate is acknowledged and the handler is skipped). Otherwise it calls the handler and, if it returned without raising, stores the key with `SET ... EX ttl` and the message id as value.

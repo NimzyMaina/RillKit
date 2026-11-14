@@ -10,7 +10,7 @@ from rillkit import Broker, Message, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 JOBS = Stream("jobs", group="workers")
 fixed = False
 

@@ -2,8 +2,8 @@
 layout: page
 pageClass: rill-landing
 title: RillKit
-titleTemplate: Redis Streams for Python
-description: Publish and consume Redis Streams in Python with consumer groups, retries, a dead-letter queue, ack policies and middleware.
+titleTemplate: Redis and Valkey streams for Python
+description: Publish and consume Redis and Valkey streams in Python, on one server or a cluster, with consumer groups, retries, a dead-letter queue, ack policies and middleware.
 ---
 
 <RillHero />
@@ -14,7 +14,7 @@ description: Publish and consume Redis Streams in Python with consumer groups, r
 ```python [publish.py]
 from rillkit import Broker
 
-broker = Broker.from_env()
+broker = Broker.from_env()  # reads RILLKIT_URL
 
 broker.publish("orders", {"id": 1, "total": 42.5})
 ```
@@ -25,7 +25,7 @@ broker.publish("orders", {"id": 1, "total": 42.5})
 ```python [worker.py]
 from rillkit import AckPolicy, Broker, Message, Stream
 
-broker = Broker.from_env()
+broker = Broker.from_env()  # reads RILLKIT_URL
 
 @broker.subscribe(
     Stream("orders", group="workers"),

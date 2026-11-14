@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from rillkit import Broker, PublishError, Stream
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 SIGNUPS = Stream("signups", maxlen=100_000)
 
 
@@ -40,7 +40,7 @@ def signup(body: Signup):
     return {"queued": entry_id}
 ```
 
-Exercising it with FastAPI's test client (`pip install httpx`) against a real Redis:
+Exercising it with FastAPI's test client (`pip install httpx`) against a real server:
 
 ```python
 from fastapi.testclient import TestClient
@@ -57,7 +57,7 @@ with TestClient(app) as client:
 (b'1793095048738-0', {b'data': b'{"email": "ada@example.com", "plan": "pro"}'})
 ```
 
-- The endpoint is a plain `def`, so FastAPI runs it in a worker thread and the blocking Redis call does not stall the event loop. If you use `async def`, wrap the call: `await run_in_threadpool(broker.publish, SIGNUPS, payload)` (from `starlette.concurrency`).
+- The endpoint is a plain `def`, so FastAPI runs it in a worker thread and the blocking client call does not stall the event loop. If you use `async def`, wrap the call: `await run_in_threadpool(broker.publish, SIGNUPS, payload)` (from `starlette.concurrency`).
 - `PublishError` is RillKit's single exception for failed publishes. Turning it into a `503` tells the client to retry.
 - `status_code=202` says "accepted, not done yet", which is what it means to queue work.
 - The stored entry is `{"data": "<json>"}`, so the worker side is just `@broker.subscribe(Stream("signups", group="mailers"))` in another process.

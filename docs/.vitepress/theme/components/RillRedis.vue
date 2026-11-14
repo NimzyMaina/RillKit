@@ -2,10 +2,10 @@
   <section class="rk-redis" aria-labelledby="rk-redis-h">
     <div class="rk-wrap rk-redis__grid">
       <div class="rk-redis__text">
-        <h2 id="rk-redis-h" class="rk-h2">Nothing hidden. Look in Redis.</h2>
+        <h2 id="rk-redis-h" class="rk-h2">Nothing hidden. Look in the server.</h2>
         <p class="rk-sub">
-          Groups, pending entries and the dead-letter stream are ordinary Redis structures. When something looks off at 2am,
-          <code>redis-cli</code> shows you what RillKit sees.
+          Groups, pending entries and the dead-letter stream are ordinary stream structures. When something looks off at 2am,
+          <code>redis-cli</code> or <code>valkey-cli</code> shows you what RillKit sees.
         </p>
         <dl class="rk-notes">
           <div class="is-ok">

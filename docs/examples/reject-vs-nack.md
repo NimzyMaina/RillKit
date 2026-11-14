@@ -15,7 +15,7 @@ from rillkit import Broker, Message, RejectMessage, Stream
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 broker.client.delete("signups", "signups-dlq")
 signups = Stream("signups", group="workers")
 attempts = {}

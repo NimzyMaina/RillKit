@@ -21,10 +21,11 @@ const rows: Row[] = [
     <span class="rk-reg rk-reg--tl" aria-hidden="true" /><span class="rk-reg rk-reg--br" aria-hidden="true" />
     <div class="rk-hero__inner">
       <div class="rk-hero__copy">
-        <h1 class="rk-title">Consume Redis Streams without writing the&nbsp;loop.</h1>
+        <h1 class="rk-title">Consume Redis and Valkey streams without writing the&nbsp;loop.</h1>
         <p class="rk-lede">
-          RillKit is a Python library on top of redis-py. You name a stream and a group, decorate a function and call
-          <code>run()</code>. Consumer groups, retries with backoff, a dead-letter queue and a clean shutdown come with it.
+          RillKit is a Python library for Redis and Valkey streams, through redis-py or valkey-py, on one server or a
+          cluster. You name a stream and a group, decorate a function and call <code>run()</code>. Consumer groups,
+          retries with backoff, a dead-letter queue and a clean shutdown come with it.
         </p>
         <div class="rk-actions">
           <a class="rk-btn rk-btn--primary" :href="withBase('/guide/getting-started')">Get started</a>
@@ -34,7 +35,7 @@ const rows: Row[] = [
           </a>
         </div>
         <CopyInstall />
-        <p class="rk-meta">Python 3.9+ <i /> MIT <i /> one dependency: redis-py</p>
+        <p class="rk-meta">Python 3.9+ <i /> MIT <i /> Redis or Valkey</p>
       </div>
 
       <figure class="rk-term" aria-label="Sample worker output">

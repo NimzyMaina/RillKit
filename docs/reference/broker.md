@@ -21,7 +21,7 @@ Broker(
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `url` | `None` | Redis URL, used if neither `client` nor `settings` is given. With none of the three, it connects to `localhost:6379`, db 0. |
+| `url` | `None` | Server URL, used if neither `client` nor `settings` is given. With none of the three, it connects to `localhost:6379`, db 0. |
 | `client` | `None` | An existing `redis.Redis`, `redis.RedisCluster`, `valkey.Valkey` or `valkey.ValkeyCluster`, used as is. Takes priority over `settings` and `url`. `stop()` closes it. |
 | `settings` | `None` | A [`Settings`](/reference/settings) object. Takes priority over `url`. |
 | `middlewares` | `()` | Broker-wide [middleware](/reference/middleware), added in order with `use()`. |
@@ -35,7 +35,7 @@ Attributes: `client` (the client), `keys` (the key builder), `middlewares` (list
 Broker.from_env(prefix: str = "REDIS_", **kwargs) -> Broker
 ```
 
-Builds `Settings.from_env(prefix)` and passes it as `settings=`. Extra keyword arguments (for example `middlewares=[...]`) go to the constructor.
+Builds `Settings.from_env(prefix)` and passes it as `settings=`: `RILLKIT_URL`, `RILLKIT_BACKEND`, `RILLKIT_MODE`, `RILLKIT_CLUSTER_NODES` and `RILLKIT_KEY_LAYOUT`, plus the older `<prefix>URL`, `<prefix>HOST` and friends (see [Settings.from_env](/reference/settings#settings-from-env)). Extra keyword arguments (for example `middlewares=[...]` or `keys=...`) go to the constructor.
 
 ## Registering
 
@@ -121,7 +121,7 @@ Each takes a function with no arguments, registers it and returns it, so it work
 
 | Method | Description |
 | --- | --- |
-| `start() -> None` | Runs `on_startup` hooks, pings Redis, creates the groups (`XGROUP CREATE ... MKSTREAM`), starts one daemon thread per subscriber, runs `after_startup` hooks, and returns. |
+| `start() -> None` | Runs `on_startup` hooks, pings the server, creates the groups (`XGROUP CREATE ... MKSTREAM`), starts one daemon thread per subscriber, runs `after_startup` hooks, and returns. |
 | `stop(timeout: Optional[float] = None) -> None` | Asks consumers to stop, joins each thread for up to `timeout` seconds (`None` waits forever), runs `on_shutdown`, closes the client, runs `after_shutdown`. Safe to call more than once and from another thread: the shutdown work happens once per start. |
 | `run(handle_signals: bool = True, shutdown_timeout: Optional[float] = None) -> None` | `start()`, then blocks until SIGINT or SIGTERM (first signal: graceful, second: `sys.exit(1)`), until `stop()` is called, or until all consumer threads have ended; then `stop(shutdown_timeout)`. Signal handlers are installed only from the main thread and the previous handlers are restored afterwards. |
 

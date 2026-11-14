@@ -52,7 +52,7 @@ import time
 from rillkit import Broker, Message, Stream
 
 logging.basicConfig(level=logging.WARNING)
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 seen = []
 
 
@@ -117,7 +117,7 @@ By default a new group begins at the start of the stream (`group_start_id="0"`),
 import time
 from rillkit import Broker, Stream
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 broker.publish("tasks", {"before": True})
 seen = []
 

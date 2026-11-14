@@ -22,6 +22,7 @@ const around = [
   { t: 'Startup and shutdown hooks', d: 'on_startup, after_startup, on_shutdown and after_shutdown, as plain decorators on the broker.' },
   { t: 'Dicts or Pydantic', d: 'Handlers get the decoded JSON as a dict. Annotate the parameter with a Pydantic model and it is validated before your code runs. Pydantic is optional.' },
   { t: 'Graceful shutdown, heartbeat', d: 'SIGINT and SIGTERM let in-flight messages finish. Each consumer refreshes a heartbeat key, and active_workers() reads them.' },
+  { t: 'Redis or Valkey, one server or a cluster', d: 'Through redis-py or valkey-py. On a cluster the stream, its DLQ and its heartbeats share one hash slot, so moving a message to the DLQ stays a single transaction.' },
   { t: 'Plain wire format', d: 'One JSON string in the data field of an ordinary stream entry. Anything that can XADD can publish, and anything that can XREADGROUP can read.' },
 ]
 </script>

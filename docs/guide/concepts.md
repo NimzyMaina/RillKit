@@ -4,11 +4,11 @@ If you already know Redis Streams, skim the headings and jump to [the wire forma
 
 ## Streams
 
-A **stream** is an append-only log stored under one Redis key. Every entry gets an id such as `1793094479536-0` (milliseconds since the epoch, then a sequence number) and a set of field/value pairs. Entries stay in the stream after they are read. Producers add with `XADD`; nothing is removed unless you trim the stream.
+A **stream** is an append-only log stored under one key. Every entry gets an id such as `1793094479536-0` (milliseconds since the epoch, then a sequence number) and a set of field/value pairs. Entries stay in the stream after they are read. Producers add with `XADD`; nothing is removed unless you trim the stream.
 
 ## Consumer groups
 
-A **consumer group** lets several workers share one stream. Redis remembers, per group, which entries have been handed out. When a worker asks for new entries with `XREADGROUP`, it gets entries nobody else in the group has received. Add workers to scale out; give each group its own name if two services each need every message.
+A **consumer group** lets several workers share one stream. The server remembers, per group, which entries have been handed out. When a worker asks for new entries with `XREADGROUP`, it gets entries nobody else in the group has received. Add workers to scale out; give each group its own name if two services each need every message.
 
 | You want | Use |
 | --- | --- |
@@ -19,7 +19,7 @@ Each worker in a group is a **consumer** with a name. RillKit names it `<group>-
 
 ## The pending list and ack
 
-When Redis hands an entry to a consumer, it records it in the group's **pending entries list** (PEL). The entry stays there, assigned to that consumer, until the consumer sends `XACK`. This is how Redis knows about work that is in flight.
+When the server hands an entry to a consumer, it records it in the group's **pending entries list** (PEL). The entry stays there, assigned to that consumer, until the consumer sends `XACK`. This is how Redis knows about work that is in flight.
 
 If a worker crashes mid-message, the entry just stays in the PEL. Nothing is lost, but nothing happens to it either, unless something else notices and takes it over with `XCLAIM`. Redis does not do that on its own.
 
@@ -28,7 +28,7 @@ If a worker crashes mid-message, the entry just stays in the PEL. Nothing is los
 RillKit uses the pending list as its retry queue. There is no separate retry stream.
 
 1. A handler raises. RillKit does not `XACK`, so the entry stays pending.
-2. Every loop, each consumer asks Redis for pending entries that have been idle for at least `claim_idle_ms` (`XPENDING ... IDLE`).
+2. Every loop, each consumer asks the server for pending entries that have been idle for at least `claim_idle_ms` (`XPENDING ... IDLE`).
 3. Entries that are due are taken over with `XCLAIM`, which bumps the delivery counter, and handed to the handler again.
 4. When an entry has been delivered more than `max_retries` times, RillKit copies it to the dead letter stream (`<name>-dlq`) and acknowledges the original.
 
@@ -58,19 +58,19 @@ RillKit stores each message as **one stream field called `data`, holding a JSON 
 XADD orders * data '{"id": 1, "total": 49.5}'
 ```
 
-That is the entire protocol. It means anything that can talk to Redis can interoperate with RillKit, in either direction.
+That is the entire protocol. It means anything that can talk to Redis or Valkey can interoperate with RillKit, in either direction. Below, a plain redis-py client (valkey-py works the same) produces and reads alongside RillKit:
 
 ```python [g_interop.py]
 import json
+import os
 import time
 
 import redis
 
 from rillkit import Broker, Stream
 
-URL = "redis://localhost:6379/0"
-r = redis.Redis.from_url(URL, decode_responses=True)
-broker = Broker(URL)
+broker = Broker.from_env()  # RILLKIT_URL
+r = redis.Redis.from_url(os.environ["RILLKIT_URL"], decode_responses=True)  # a plain client
 
 
 @broker.subscribe(Stream("orders", group="billing"), consumer="billing-1", block_ms=300)

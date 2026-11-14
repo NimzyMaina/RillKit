@@ -24,7 +24,7 @@ from rillkit import Broker, Message, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 JOBS = Stream("jobs", group="workers")
 fixed = False
 
@@ -113,7 +113,7 @@ import time
 from rillkit import Broker, Message, Stream
 
 logging.basicConfig(level=logging.CRITICAL)
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 t0 = time.time()
 
 
@@ -153,7 +153,7 @@ The copy contains the original fields (including `data`) plus:
 | `x-error` | the error message, cut to 1000 characters |
 | `x-deliveries` | how many times the entry was delivered |
 
-You can inspect it with plain Redis commands:
+You can inspect it with plain commands (`valkey-cli` takes the same ones):
 
 ```bash
 redis-cli XRANGE orders-dlq - +
@@ -185,13 +185,10 @@ If a message cannot be decoded, retrying cannot help, so RillKit dead-letters it
 import logging
 import time
 
-import redis
-
 from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
-URL = "redis://localhost:6379/0"
-broker = Broker(URL)
+broker = Broker.from_env()
 
 
 @broker.subscribe(Stream("tasks", group="g"), consumer="c1", block_ms=200)
@@ -199,12 +196,12 @@ def handle(task: dict):
     print("ok", task)
 
 
-r = redis.Redis.from_url(URL, decode_responses=True)
-r.xadd("tasks", {"data": "this is not json"})
-r.xadd("tasks", {"other": "no data field"})
+broker.client.xadd("tasks", {"data": "this is not json"})  # written without RillKit
+broker.client.xadd("tasks", {"other": "no data field"})
 broker.start()
 time.sleep(1)
-for _id, f in r.xrange("tasks-dlq"):
+for _id, raw in broker.client.xrange("tasks-dlq"):
+    f = {k.decode(): v.decode() for k, v in raw.items()}
     print({k: v for k, v in f.items() if k in ("data", "other", "x-error", "x-deliveries")})
 broker.stop()
 ```

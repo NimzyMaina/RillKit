@@ -4,7 +4,7 @@
 from rillkit import KeyBuilder, PlainKeys, HashTagKeys
 ```
 
-A key builder maps a logical `Stream` to the physical keys RillKit reads and writes. The broker's builder is `broker.keys`. Pick one with `Broker(keys=...)` or `Settings(key_layout=...)`; by default it is `PlainKeys` for a standalone client and `HashTagKeys` for a cluster client. See [key layout](/guide/cluster#key-layout).
+A key builder maps a logical `Stream` to the physical keys RillKit reads and writes. The broker's builder is `broker.keys`. Pick one with `Broker(keys=...)` or `Settings(key_layout=...)`; by default it is `PlainKeys` for a standalone client and `HashTagKeys` for a cluster client. [Keys](/guide/keys) explains why and when to use each.
 
 ## `PlainKeys()`
 

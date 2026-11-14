@@ -2,14 +2,14 @@
 
 ## Heartbeat and active_workers
 
-Every consumer writes a heartbeat key, `rillkit:workers:<stream>:<group>:<consumer>`, with a time-to-live of `heartbeat_ttl` seconds (default 60). It is refreshed at the top of every loop and after every message, and deleted on a clean shutdown. A worker that crashes simply stops refreshing it and drops off after the TTL.
+Every consumer writes a heartbeat key, `rillkit:workers:<stream>:<group>:<consumer>` (or `rk:{<stream>}:workers:<group>:<consumer>` with [hash-tagged keys](/guide/keys); `broker.keys.heartbeat(...)` gives the exact name), with a time-to-live of `heartbeat_ttl` seconds (default 60). It is refreshed at the top of every loop and after every message, and deleted on a clean shutdown. A worker that crashes simply stops refreshing it and drops off after the TTL.
 
 ```python
 broker.active_workers("orders", group="billing")   # ['billing-web1-4242', 'billing-web2-977']
 broker.active_workers(Stream("orders", group="billing"))
 ```
 
-`active_workers` returns the sorted consumer names whose heartbeat is alive. `XINFO CONSUMERS` only lists consumers that have already received a message, so it misses idle workers. The heartbeat does not.
+`active_workers` returns the sorted consumer names whose heartbeat is alive. On a cluster it scans every primary. `XINFO CONSUMERS` only lists consumers that have already received a message, so it misses idle workers. The heartbeat does not.
 
 ```python [g_ops.py]
 import time
@@ -17,7 +17,7 @@ import logging
 from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.WARNING)
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 S = Stream("tasks", group="workers")
 
 
@@ -34,7 +34,7 @@ print(broker.active_workers("tasks", group="workers"))
 print(sorted(k.decode() for k in broker.client.scan_iter("rillkit:workers:*:*")) )
 print(broker.client.ttl("rillkit:workers:tasks:workers:w1"))
 broker.stop()
-print("after stop:", Broker("redis://localhost:6379/0").active_workers(S))
+print("after stop:", Broker.from_env().active_workers(S))
 ```
 
 ```text
@@ -53,7 +53,7 @@ The heartbeat is refreshed between messages, not during a handler. A handler tha
 
 - One subscription is one thread, processing one message at a time.
 - Scale by running more worker processes in the same group (see [Lifecycle](/guide/lifecycle#running-several-worker-processes)), or by adding more `@broker.subscribe` handlers on different streams.
-- Redis spreads new entries over the consumers in the group, so throughput rises with the number of workers. Ordering across workers is not guaranteed.
+- The server spreads new entries over the consumers in the group, so throughput rises with the number of workers. Ordering across workers is not guaranteed.
 - Keep an eye on `count`: a larger batch means a worker holds more entries pending at a time, and on shutdown the unprocessed part of a batch waits for `claim_idle_ms`.
 
 ## Claim tuning
@@ -74,11 +74,11 @@ Streams keep every entry until you remove it. Choose one:
 - `Stream("orders", maxlen=100_000)` or `publish(..., maxlen=...)` trims on write (approximately; pass `approximate=False` to `publish` for an exact cap).
 - A scheduled job running `XTRIM orders MAXLEN ~ 100000`.
 
-RillKit never trims the dead letter stream. Cap it yourself, for example with `redis-cli XTRIM orders-dlq MAXLEN ~ 10000`, and watch its length. `Idempotent` markers expire on their own after `ttl`.
+RillKit never trims the dead letter stream. Cap it yourself, for example with `redis-cli XTRIM orders-dlq MAXLEN ~ 10000` (or `valkey-cli`), and watch its length. `Idempotent` markers expire on their own after `ttl`.
 
-## Monitoring with redis-cli
+## Monitoring with redis-cli or valkey-cli
 
-Everything RillKit does is visible in plain Redis. These are real outputs from a worker (`w1`) that handled four messages, one of which failed and is waiting for its retry. `redis-cli` prints one value per line when piped, as below:
+Everything RillKit does is visible with the server's own commands; `valkey-cli` takes exactly the same ones as `redis-cli`. The key names below are the single-server defaults. On a cluster, or with another [key layout](/guide/keys), use the physical keys instead: `broker.keys.stream(s)` and `broker.keys.dlq(s)` print them, for example `'rk:{tasks}:stream'` (quote the braces in a shell), and add `-c` so the CLI follows the cluster. These are real outputs from a worker (`w1`) that handled four messages, one of which failed and is waiting for its retry. `redis-cli` prints one value per line when piped, as below:
 
 ```bash
 redis-cli XLEN tasks                       # entries in the stream
@@ -87,7 +87,7 @@ redis-cli XINFO CONSUMERS tasks workers    # per consumer: pending, idle
 redis-cli XPENDING tasks workers           # summary of the pending list
 redis-cli XPENDING tasks workers - + 10    # detail: id, consumer, idle ms, deliveries
 redis-cli XRANGE tasks-dlq - +             # dead letters
-redis-cli KEYS 'rillkit:workers:*'         # live heartbeats (avoid KEYS on big databases)
+redis-cli --scan --pattern 'rillkit:workers:*'   # live heartbeats (on a cluster: broker.active_workers)
 ```
 
 ```text
@@ -131,7 +131,7 @@ w1
 1094
 1
 
-$ redis-cli KEYS rillkit:workers:*
+$ redis-cli --scan --pattern 'rillkit:workers:*'
 rillkit:workers:tasks:workers:w1
 ```
 

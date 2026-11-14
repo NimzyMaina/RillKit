@@ -1,6 +1,6 @@
 # Examples
 
-Every example here is a complete script that was run against a real Redis, and the output shown is what it printed. To run one yourself, change the Redis URL to match your setup and `pip install rillkit` (plus `"rillkit[pydantic]"` where noted).
+Every example here is a complete script that was run against a real server, and the output shown is what it printed. To run one yourself, `pip install rillkit` (plus `"rillkit[pydantic]"` where noted), point `RILLKIT_URL` at your Redis or Valkey server, and run it. They work the same with `RILLKIT_BACKEND=valkey`.
 
 Most scripts use `start()` and `stop()` with a short sleep so they finish by themselves. In a real service you would call `broker.run()` instead (see [Lifecycle](/guide/lifecycle)), and you would use the default `block_ms` and `claim_idle_ms`. The scripts use short values so the retry behaviour is visible in seconds.
 
@@ -18,4 +18,4 @@ Most scripts use `start()` and `stop()` with a short sleep so they finish by the
 | [FastAPI publisher](/examples/fastapi-publisher) | publishing from a web endpoint |
 | [Migrating from redis-py](/examples/migrating-from-raw-redis-py) | a hand-rolled `XREADGROUP` loop, before and after |
 
-The examples use stream names like `orders`, `jobs` and `tasks`. Use your own names, and a separate Redis database while experimenting.
+The examples use stream names like `orders`, `jobs` and `tasks`. Use your own names, and a separate database while experimenting.

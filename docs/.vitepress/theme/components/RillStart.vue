@@ -8,7 +8,7 @@ import { withBase } from 'vitepress'
       <div>
         <h2 id="rk-start-h" class="rk-h2">Running in about five minutes</h2>
         <p class="rk-sub">
-          You need Python 3.9 or newer and a Redis you can reach. Local Docker is fine. The guide walks through the
+          You need Python 3.9 or newer and a Redis or Valkey server you can reach. Local Docker is fine. The guide walks through the
           same steps with more explanation, then covers retries, the DLQ and running several workers.
         </p>
         <p class="rk-links">
@@ -19,11 +19,11 @@ import { withBase } from 'vitepress'
       </div>
       <figure class="rk-term rk-term--plain" aria-label="Quick start commands">
         <div class="rk-term__bar"><span class="rk-term__tab">terminal</span></div>
-        <pre><code><span class="c"># redis, if you do not have one</span>
-<span class="p">$</span> docker run -d -p 6379:6379 redis:7
+        <pre><code><span class="c"># a server, if you do not have one (or redis:7)</span>
+<span class="p">$</span> docker run -d -p 6379:6379 valkey/valkey:8
 
 <span class="p">$</span> pip install rillkit
-<span class="p">$</span> export REDIS_URL=redis://localhost:6379/0
+<span class="p">$</span> export RILLKIT_URL=redis://localhost:6379/0
 
 <span class="p">$</span> python worker.py   <span class="c"># terminal 1</span>
 <span class="p">$</span> python publish.py  <span class="c"># terminal 2</span></code></pre>

@@ -14,7 +14,7 @@ from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 
 DOCUMENTS = Stream("documents", group="extractors")
 FEATURES = Stream("features", group="modelers", maxlen=10_000)

@@ -2,7 +2,7 @@
 
 ## Handlers are plain functions
 
-`@broker.subscribe` returns your function unchanged, and `@broker.publisher` only records where its return value should go. So the cheapest tests call the handler directly with no Redis at all:
+`@broker.subscribe` returns your function unchanged, and `@broker.publisher` only records where its return value should go. So the cheapest tests call the handler directly with no server at all:
 
 ```python
 def test_handler_is_a_plain_function():
@@ -11,7 +11,7 @@ def test_handler_is_a_plain_function():
 
 If your handler takes a `Message`, build a stand-in. Anything with the attributes you use will do, for example `types.SimpleNamespace(id="1-0", deliveries=1, body={...})`.
 
-## Against a real Redis
+## Against a real server
 
 For end-to-end checks, start a real `Broker`, register your handler on a **unique stream per test**, and wait for the result. Unique names keep tests independent of each other and of leftovers from previous runs.
 
@@ -20,33 +20,23 @@ import time
 import uuid
 
 import pytest
-import redis
 
 from rillkit import Broker, Stream
-
-REDIS_URL = "redis://localhost:6379/0"
-
-
-@pytest.fixture
-def redis_client():
-    client = redis.Redis.from_url(REDIS_URL)
-    yield client
-    client.close()
-
-
-@pytest.fixture
-def stream(redis_client):
-    """A stream with a unique name so tests never see each other's messages."""
-    name = f"test-{uuid.uuid4().hex[:8]}"
-    yield Stream(name, group="test")
-    redis_client.delete(name, f"{name}-dlq")
 
 
 @pytest.fixture
 def broker():
-    b = Broker(REDIS_URL)
+    b = Broker.from_env()  # RILLKIT_URL (and RILLKIT_BACKEND / RILLKIT_MODE) of a test server
     yield b
     b.stop()
+
+
+@pytest.fixture
+def stream(broker):
+    """A stream with a unique name so tests never see each other's messages."""
+    s = Stream(f"test-{uuid.uuid4().hex[:8]}", group="test")
+    yield s
+    broker.client.delete(broker.keys.stream(s), broker.keys.dlq(s))
 
 
 def wait_for(predicate, timeout=5.0):
@@ -81,7 +71,7 @@ def test_handler_is_a_plain_function():
     assert handle_order({"id": 7, "total": 100}) == {"order_id": 7, "amount": 116.0}
 
 
-def test_end_to_end(broker, stream, redis_client):
+def test_end_to_end(broker, stream):
     results = []
 
     @broker.subscribe(stream, block_ms=100)
@@ -93,15 +83,16 @@ def test_end_to_end(broker, stream, redis_client):
     assert wait_for(lambda: results == [1])
 
 
-def test_failures_land_in_the_dlq(broker, stream, redis_client):
+def test_failures_land_in_the_dlq(broker, stream):
     @broker.subscribe(stream, block_ms=100, max_retries=0)
     def handle(order: dict):
         raise ValueError("boom")
 
     broker.start()
     broker.publish(stream, {"id": 1})
-    assert wait_for(lambda: redis_client.xlen(stream.dlq_name) == 1)
-    (_, fields), = redis_client.xrange(stream.dlq_name)
+    dlq = broker.keys.dlq(stream)  # the physical key, also right on a cluster
+    assert wait_for(lambda: broker.client.xlen(dlq) == 1)
+    (_, fields), = broker.client.xrange(dlq)
     assert fields[b"x-error"] == b"boom"
 ```
 
