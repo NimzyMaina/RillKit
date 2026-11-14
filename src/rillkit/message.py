@@ -1,10 +1,7 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from .exceptions import DecodeError
 from .stream import Stream
-
-if TYPE_CHECKING:
-    import redis
 
 _MISSING = object()
 
@@ -14,6 +11,8 @@ class Message:
 
     ``body`` is the decoded payload (a plain dict for JSON objects). ``deliveries`` is how many
     times Redis has delivered this entry to a consumer in the group, counting the current one.
+    ``key`` is the physical key of the stream, which differs from ``stream.name`` when the broker
+    uses hash-tagged keys.
     """
 
     def __init__(
@@ -23,7 +22,8 @@ class Message:
         raw: dict[str, str],
         deliveries: int,
         consumer: str,
-        client: "redis.Redis",
+        client: Any,
+        key: Optional[str] = None,
     ) -> None:
         self.id = id
         self.stream = stream
@@ -34,6 +34,7 @@ class Message:
         self.nacked = False
         self.rejected = False
         self.reject_reason: Optional[str] = None
+        self.key = key if key is not None else stream.name
         self._client = client
         self._body: Any = _MISSING
         self.error: Optional[BaseException] = None
@@ -51,7 +52,7 @@ class Message:
         if self.acked:
             return
         assert self.stream.group is not None  # only consumed streams have messages
-        self._client.xack(self.stream.name, self.stream.group, self.id)
+        self._client.xack(self.key, self.stream.group, self.id)
         self.acked = True
         self.nacked = False
 

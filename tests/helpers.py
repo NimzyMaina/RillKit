@@ -1,10 +1,37 @@
 import contextlib
+import os
 import threading
 import time
 from collections.abc import Iterator
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
-import redis
+from rillkit import HashTagKeys, KeyBuilder, PlainKeys, Stream
+from rillkit.clients import CLIENT_ERRORS
+from rillkit.stream import StreamLike, as_stream
+
+BACKEND = os.environ.get("RILLKIT_TEST_BACKEND", "redis")
+MODE = os.environ.get("RILLKIT_TEST_MODE", "standalone")
+
+# The layout a broker picks by default for the server under test.
+KEYS: KeyBuilder = HashTagKeys() if MODE == "cluster" else PlainKeys()
+
+
+def sk(stream: StreamLike) -> str:
+    """Physical key of a stream."""
+    return KEYS.stream(as_stream(stream))
+
+
+def dk(stream: StreamLike, dlq: Optional[str] = None) -> str:
+    """Physical key of a stream's DLQ (``dlq`` overrides the stream's own DLQ name)."""
+    s = as_stream(stream)
+    if dlq is not None:
+        s = Stream(s.name, s.group, dlq)
+    return KEYS.dlq(s)
+
+
+def hk(stream: StreamLike, group: str, consumer: str) -> str:
+    """Physical key of a consumer's heartbeat."""
+    return KEYS.heartbeat(as_stream(stream), group, consumer)
 
 
 def wait_until(cond: Callable[[], Any], timeout: float = 10.0, interval: float = 0.02) -> bool:
@@ -25,20 +52,19 @@ def fast(**overrides: Any) -> dict[str, Any]:
 
 
 @contextlib.contextmanager
-def keep_server_awake(url: str, interval: float = 0.05) -> Iterator[None]:
-    """Send a cheap PING every ``interval`` seconds from another client.
+def keep_server_awake(client: Any, interval: float = 0.05) -> Iterator[None]:
+    """Send a cheap PING every ``interval`` seconds from ``client`` in another thread.
 
-    Harmless against a real Redis. Some sandboxed local servers only fire blocking-command
+    Harmless against a real server. Some sandboxed local servers only fire blocking-command
     timeouts when other traffic wakes their event loop, which makes idle-consumer tests hang.
     """
     stop = threading.Event()
-    client = redis.Redis.from_url(url)
 
     def ping() -> None:
         while not stop.is_set():
             try:
                 client.ping()
-            except redis.RedisError:
+            except CLIENT_ERRORS:
                 pass
             stop.wait(interval)
 
@@ -49,22 +75,22 @@ def keep_server_awake(url: str, interval: float = 0.05) -> Iterator[None]:
     finally:
         stop.set()
         thread.join(2)
-        client.close()
 
 
-def pending(r: "redis.Redis", stream: str, group: str = "g") -> int:
-    return int(r.xpending(stream, group)["pending"])
+def pending(r: Any, stream: str, group: str = "g") -> int:
+    """Pending count of a logical stream."""
+    return int(r.xpending(sk(stream), group)["pending"])
 
 
-def read_count(r: "redis.Redis", stream: str, group: str = "g") -> int:
-    """How many entries the group has read so far."""
-    return int(r.xinfo_groups(stream)[0]["entries-read"] or 0)
+def read_count(r: Any, stream: str, group: str = "g") -> int:
+    """How many entries the group has read so far from a logical stream."""
+    return int(r.xinfo_groups(sk(stream))[0]["entries-read"] or 0)
 
 
-def entries(r: "redis.Redis", stream: str) -> list:
-    """Entries of a stream as (id, {str: str}) pairs."""
+def entries(r: Any, key: str) -> list:
+    """Entries at a physical key as (id, {str: str}) pairs."""
     out = []
-    for entry_id, raw in r.xrange(stream):
+    for entry_id, raw in r.xrange(key):
         out.append((entry_id.decode(), {k.decode(): v.decode() for k, v in raw.items()}))
     return out
 

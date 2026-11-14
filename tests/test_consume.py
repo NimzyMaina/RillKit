@@ -3,7 +3,7 @@ import threading
 import pytest
 from pydantic import BaseModel
 
-from helpers import entries, fast, pending, settle, wait_until
+from helpers import dk, entries, fast, pending, settle, sk, wait_until
 from rillkit import AckMessage, AckPolicy, Broker, Message, NackMessage, Stream
 
 
@@ -79,7 +79,7 @@ def test_start_twice_is_safe_for_existing_group(broker: Broker, r, name):
     @broker.subscribe(name, group="g", **fast())
     def handle(body): ...
 
-    r.xgroup_create(name, "g", id="0", mkstream=True)
+    r.xgroup_create(sk(name), "g", id="0", mkstream=True)
     broker.start()  # BUSYGROUP is swallowed
     assert wait_until(lambda: broker.subscribers[0]._thread.is_alive())
 
@@ -110,8 +110,8 @@ def test_invalid_model_goes_straight_to_dlq_without_retries(broker: Broker, r, n
 
     broker.start()
     entry_id = broker.publish(name, {"id": "not-an-int"})
-    assert wait_until(lambda: r.xlen(f"{name}-dlq") == 1)
-    [(_, fields)] = entries(r, f"{name}-dlq")
+    assert wait_until(lambda: r.xlen(dk(name)) == 1)
+    [(_, fields)] = entries(r, dk(name))
     assert fields["x-original-id"] == entry_id
     assert fields["x-deliveries"] == "1"
     assert "validation" in fields["x-error"]
@@ -127,8 +127,8 @@ def test_undecodable_json_goes_to_dlq(broker: Broker, r, name):
         calls.append(body)
 
     broker.start()
-    r.xadd(name, {"data": "{not json"})
-    assert wait_until(lambda: r.xlen(f"{name}-dlq") == 1)
+    r.xadd(sk(name), {"data": "{not json"})
+    assert wait_until(lambda: r.xlen(dk(name)) == 1)
     assert calls == []
     assert pending(r, name) == 0
 
@@ -138,9 +138,9 @@ def test_entry_without_data_field_goes_to_dlq(broker: Broker, r, name):
     def handle(body): ...
 
     broker.start()
-    r.xadd(name, {"other": "x"})
-    assert wait_until(lambda: r.xlen(f"{name}-dlq") == 1)
-    assert "data" in entries(r, f"{name}-dlq")[0][1]["x-error"]
+    r.xadd(sk(name), {"other": "x"})
+    assert wait_until(lambda: r.xlen(dk(name)) == 1)
+    assert "data" in entries(r, dk(name))[0][1]["x-error"]
 
 
 def test_custom_dlq_name(broker: Broker, r, name):
@@ -148,8 +148,8 @@ def test_custom_dlq_name(broker: Broker, r, name):
     def handle(body): ...
 
     broker.start()
-    r.xadd(name, {"data": "nope"})
-    assert wait_until(lambda: r.xlen(f"{name}-dead") == 1)
+    r.xadd(sk(name), {"data": "nope"})
+    assert wait_until(lambda: r.xlen(dk(name, f"{name}-dead")) == 1)
 
 
 # ack policies
@@ -179,7 +179,7 @@ def test_nack_on_error_failure_leaves_message_pending(broker: Broker, r, name):
     broker.publish(name, {})
     assert wait_until(lambda: calls)
     assert wait_until(lambda: pending(r, name) == 1)
-    assert r.xlen(f"{name}-dlq") == 0
+    assert r.xlen(dk(name)) == 0
 
 
 def test_ack_always_acks_failures_without_retry_or_dlq(broker: Broker, r, name):
@@ -195,7 +195,7 @@ def test_ack_always_acks_failures_without_retry_or_dlq(broker: Broker, r, name):
     assert wait_until(lambda: calls and pending(r, name) == 0)
     settle(0.5)
     assert len(calls) == 1
-    assert r.xlen(f"{name}-dlq") == 0
+    assert r.xlen(dk(name)) == 0
 
 
 def test_ack_always_acks_success(broker: Broker, r, name):
@@ -224,7 +224,7 @@ def test_ack_first_acks_before_handler_runs(broker: Broker, r, name):
     assert seen == [0]
     settle(0.5)
     assert len(seen) == 1  # at most once, never retried
-    assert r.xlen(f"{name}-dlq") == 0
+    assert r.xlen(dk(name)) == 0
 
 
 def test_manual_without_ack_stays_pending(broker: Broker, r, name):
@@ -268,7 +268,7 @@ def test_manual_msg_nack_is_retried_then_dead_lettered(broker: Broker, r, name):
 
     broker.start()
     broker.publish(name, {})
-    assert wait_until(lambda: r.xlen(f"{name}-dlq") == 1)
+    assert wait_until(lambda: r.xlen(dk(name)) == 1)
     assert calls == [1, 2]
     assert pending(r, name) == 0
 
@@ -283,7 +283,7 @@ def test_manual_exception_counts_as_nack(broker: Broker, r, name):
 
     broker.start()
     broker.publish(name, {})
-    assert wait_until(lambda: r.xlen(f"{name}-dlq") == 1)
+    assert wait_until(lambda: r.xlen(dk(name)) == 1)
     assert len(calls) == 2
 
 
@@ -297,7 +297,7 @@ def test_ack_after_nack_wins(broker: Broker, r, name):
     broker.start()
     broker.publish(name, {})
     assert wait_until(lambda: broker.subscribers[0]._thread.is_alive())
-    assert wait_until(lambda: r.xlen(name) == 1 and pending(r, name) == 0)
+    assert wait_until(lambda: r.xlen(sk(name)) == 1 and pending(r, name) == 0)
 
 
 def test_ack_message_exception_acks_even_with_nack_on_error(broker: Broker, r, name):
@@ -313,7 +313,7 @@ def test_ack_message_exception_acks_even_with_nack_on_error(broker: Broker, r, n
     assert wait_until(lambda: calls and pending(r, name) == 0)
     settle(0.4)
     assert len(calls) == 1
-    assert r.xlen(f"{name}-dlq") == 0
+    assert r.xlen(dk(name)) == 0
 
 
 def test_nack_message_exception_retries_even_with_ack_always(broker: Broker, r, name):
@@ -326,7 +326,7 @@ def test_nack_message_exception_retries_even_with_ack_always(broker: Broker, r, 
 
     broker.start()
     broker.publish(name, {})
-    assert wait_until(lambda: r.xlen(f"{name}-dlq") == 1)
+    assert wait_until(lambda: r.xlen(dk(name)) == 1)
     assert len(calls) == 2
     assert pending(r, name) == 0
 

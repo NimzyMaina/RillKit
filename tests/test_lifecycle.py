@@ -2,7 +2,7 @@ import os
 import signal
 import threading
 
-from helpers import fast, pending, read_count, wait_until
+from helpers import fast, hk, pending, read_count, sk, wait_until
 from rillkit import Broker, Message
 
 
@@ -48,11 +48,11 @@ def test_hook_state_at_each_stage(broker: Broker, r, name):
 
     @broker.on_startup
     def before():
-        state["group_exists_in_on_startup"] = bool(r.exists(name))
+        state["group_exists_in_on_startup"] = bool(r.exists(sk(name)))
 
     @broker.after_startup
     def after():
-        state["group_exists_after_startup"] = bool(r.exists(name))
+        state["group_exists_after_startup"] = bool(r.exists(sk(name)))
         state["alive_after_startup"] = broker.subscribers[0]._thread.is_alive()
 
     @broker.on_shutdown
@@ -208,7 +208,7 @@ def test_heartbeat_registered_while_running_and_removed_after_stop(broker: Broke
     broker.start()
     assert wait_until(lambda: broker.active_workers(name, "g") == ["worker-1"])
     assert broker.active_workers(name, "g") == ["worker-1"]
-    key = f"rillkit:workers:{name}:g:worker-1"
+    key = hk(name, "g", "worker-1")
     assert 0 < r.ttl(key) <= 60
     broker.stop(timeout=5)
     assert not r.exists(key)
@@ -230,8 +230,8 @@ def test_heartbeat_ttl_is_configurable(broker: Broker, r, name):
     def handle(body): ...
 
     broker.start()
-    assert wait_until(lambda: r.exists(f"rillkit:workers:{name}:g:w"))
-    assert r.ttl(f"rillkit:workers:{name}:g:w") <= 5
+    assert wait_until(lambda: r.exists(hk(name, "g", "w")))
+    assert r.ttl(hk(name, "g", "w")) <= 5
 
 
 def test_heartbeat_disabled(broker: Broker, r, name):
@@ -264,3 +264,58 @@ def test_two_consumers_in_one_group_share_work(make_broker, r, name):
     assert wait_until(lambda: len(seen["a"]) + len(seen["b"]) == 20 and pending(r, name) == 0)
     assert sorted(seen["a"] + seen["b"]) == list(range(20))
     assert wait_until(lambda: brokers[0].active_workers(name, "g") == ["a", "b"])
+
+
+def _count_closes(broker: Broker) -> list:
+    closes: list = []
+    real_close = broker.client.close
+
+    def close():
+        closes.append(1)
+        real_close()
+
+    broker.client.close = close
+    return closes
+
+
+def test_stop_closes_the_client_exactly_once(broker: Broker, name):
+    closes = _count_closes(broker)
+
+    @broker.subscribe(name, group="g", **fast())
+    def handle(body): ...
+
+    broker.start()
+    stoppers = [threading.Thread(target=broker.stop, kwargs={"timeout": 5}) for _ in range(3)]
+    for t in stoppers:
+        t.start()
+    for t in stoppers:
+        t.join(10)
+    broker.stop(timeout=5)
+    assert closes == [1]
+
+
+def test_client_is_closed_even_when_a_shutdown_hook_raises(broker: Broker):
+    closes = _count_closes(broker)
+
+    @broker.on_shutdown
+    def boom():
+        raise RuntimeError("x")
+
+    broker.start()
+    try:
+        broker.stop(timeout=5)
+    except RuntimeError:
+        pass
+    assert closes == [1]
+
+
+def test_injected_client_is_used_as_is(server_settings):
+    from rillkit import HashTagKeys, Stream
+
+    client = server_settings().client()
+    broker = Broker(client=client, keys=HashTagKeys(prefix="app"))
+    try:
+        assert broker.client is client
+        assert broker.keys.stream(Stream("o")) == "app:{o}:stream"
+    finally:
+        client.close()

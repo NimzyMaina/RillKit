@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from helpers import entries, fast, pending, read_count, settle, wait_until
+from helpers import dk, entries, fast, pending, read_count, settle, sk, wait_until
 from rillkit import AckMessage, BaseMiddleware, Idempotent, Message, PublishCommand, Stream
 
 
@@ -113,7 +113,7 @@ def test_consume_scope_can_short_circuit_with_ack_message(make_broker, r, name):
 
     broker.start()
     broker.publish(name, {})
-    assert wait_until(lambda: pending(r, name) == 0 and r.xlen(name) == 1)
+    assert wait_until(lambda: pending(r, name) == 0 and r.xlen(sk(name)) == 1)
     settle(0.2)
     assert handled == []
 
@@ -153,8 +153,8 @@ def test_on_receive_runs_even_for_undecodable_messages(make_broker, r, name):
     def handle(body): ...
 
     broker.start()
-    r.xadd(name, {"data": "garbage"})
-    assert wait_until(lambda: received and r.xlen(f"{name}-dlq") == 1)
+    r.xadd(sk(name), {"data": "garbage"})
+    assert wait_until(lambda: received and r.xlen(dk(name)) == 1)
     assert received == [{"data": "garbage"}]
 
 
@@ -167,8 +167,8 @@ def test_publish_scope_can_mutate_command(make_broker, r, name):
 
     broker = make_broker(middlewares=[Rewrite()])
     entry_id = broker.publish(name, {"a": 1})
-    assert r.xlen(name) == 0
-    [(stored_id, fields)] = entries(r, f"{name}-rewritten")
+    assert r.xlen(sk(name)) == 0
+    [(stored_id, fields)] = entries(r, sk(f"{name}-rewritten"))
     assert stored_id == entry_id
     assert json.loads(fields["data"]) == {"a": 1, "stamped": True}
 
@@ -186,7 +186,7 @@ def test_publish_scope_can_change_maxlen_and_sees_default(make_broker, r, name):
     for _ in range(500):
         broker.publish(Stream(name, maxlen=1000), {})
     assert set(seen) == {1000}
-    assert r.xlen(name) < 500
+    assert r.xlen(sk(name)) < 500
 
 
 def test_publish_scope_order_outermost_first(make_broker, name):
@@ -224,7 +224,7 @@ def test_publish_scope_wraps_handler_return_value_publish(make_broker, r, name):
 
     broker.start()
     broker.publish(name, {})
-    assert wait_until(lambda: r.xlen(f"{name}-out") == 1)
+    assert wait_until(lambda: r.xlen(sk(f"{name}-out")) == 1)
     assert published == [name, f"{name}-out"]
 
 
