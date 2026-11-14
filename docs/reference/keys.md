@@ -16,6 +16,7 @@ RillKit's original names, unchanged since 0.1.
 | `dlq(stream)` | `stream.dlq` or `<name>-dlq` |
 | `heartbeat_prefix(stream, group)` | `rillkit:workers:<name>:<group>:` |
 | `heartbeat(stream, group, consumer)` | `rillkit:workers:<name>:<group>:<consumer>` |
+| `idempotency(stream, key)` | `rillkit:done:<name>:<key>` |
 
 ## `HashTagKeys(prefix="rk", tenant=None)`
 
@@ -26,15 +27,19 @@ Everything for one stream in one cluster slot.
 | `stream(stream)` | `rk:{<name>}:stream` |
 | `dlq(stream)` | `rk:{<name>}:dlq`, or `rk:{<name>}:dlq:<custom name>` |
 | `heartbeat(stream, group, consumer)` | `rk:{<name>}:workers:<group>:<consumer>` |
+| `idempotency(stream, key)` | `rk:{<name>}:done:<key>` |
 | `tag(stream)` | `{<name>}`, or `{<tenant>:<name>}` |
 
 - `prefix` may be empty, and cannot contain braces.
 - `tenant` is an opaque id placed inside the tag. It must not be empty. It is for placement, not access control.
-- `{`, `}` and `%` in names are percent-encoded, and `:` too in the tenant, so a name cannot escape the tag or collide with another tenant's.
+- `%`, `{`, `}` and `:` are percent-encoded in names and tenants, so a tag holds one plain `:` with a tenant and none without: no name can escape the tag, collide with another stream, or produce another tenant's keys.
+- An empty stream name raises `ConfigurationError` (`{}` is not a hash tag).
+
+See [Keys](/guide/keys) for annotated examples of every key.
 
 ## `KeyBuilder`
 
-Subclass it to use your own layout. Implement `stream`, `dlq` and `heartbeat_prefix`; `heartbeat` defaults to the prefix followed by the consumer name. For the DLQ move to be a transaction on a cluster, `stream` and `dlq` must hash to the same slot; otherwise it runs in two steps (see [DLQ atomicity](/guide/cluster#dlq-atomicity)).
+Subclass it to use your own layout. Implement `stream`, `dlq` and `heartbeat_prefix`; `heartbeat` defaults to the prefix followed by the consumer name, and `idempotency` defaults to `rillkit:done:<name>:<key>`. For the DLQ move to be a transaction on a cluster, `stream` and `dlq` must hash to the same slot; otherwise it runs in two steps (see [DLQ atomicity](/guide/cluster#dlq-atomicity)).
 
 ```python
 from rillkit import Broker, KeyBuilder, Stream

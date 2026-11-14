@@ -1,8 +1,17 @@
 import json
 from typing import Optional
 
-from helpers import dk, entries, fast, pending, read_count, settle, sk, wait_until
-from rillkit import AckMessage, BaseMiddleware, Idempotent, Message, PublishCommand, Stream
+from helpers import dk, entries, fast, ik, pending, read_count, settle, sk, wait_until
+from rillkit import (
+    AckMessage,
+    BaseMiddleware,
+    HashTagKeys,
+    Idempotent,
+    Message,
+    PlainKeys,
+    PublishCommand,
+    Stream,
+)
 
 
 class Recorder(BaseMiddleware):
@@ -320,8 +329,8 @@ def test_idempotent_skips_duplicates(make_broker, r, name):
         broker.publish(name, {"rid": rid})
     assert wait_until(lambda: len(processed) == 5 and pending(r, name) == 0)
     assert handled == ["a", "b"]
-    assert r.exists(f"rillkit:done:{name}:a")
-    assert 0 < r.ttl(f"rillkit:done:{name}:a") <= 7 * 24 * 3600
+    assert r.exists(ik(name, "a"))
+    assert 0 < r.ttl(ik(name, "a")) <= 7 * 24 * 3600
 
 
 def test_idempotent_does_not_record_failed_attempts(make_broker, r, name):
@@ -340,3 +349,50 @@ def test_idempotent_does_not_record_failed_attempts(make_broker, r, name):
     assert wait_until(lambda: len(attempts) == 2 and pending(r, name) == 0)
     assert r.exists(f"idem:{name}:x")
     assert r.ttl(f"idem:{name}:x") <= 60
+
+
+def test_idempotent_markers_follow_the_broker_key_builder(make_broker, r, name):
+    done = []
+    broker = make_broker(
+        keys=HashTagKeys(prefix="app", tenant="t-1"),
+        middlewares=[Idempotent(key=lambda m: m.body["rid"])],
+    )
+
+    @broker.subscribe(name, group="g", **fast())
+    def handle(body):
+        done.append(body["rid"])
+
+    broker.start()
+    broker.publish(name, {"rid": "a"})
+    assert wait_until(lambda: done == ["a"])
+    marker = f"app:{{t-1:{name}}}:done:a"
+    assert wait_until(lambda: r.exists(marker))
+    assert not r.exists(f"rillkit:done:{name}:a")
+
+
+def test_tenants_do_not_share_idempotent_markers(make_broker, r, name):
+    handled = {"t-1": [], "t-2": []}
+    brokers = []
+    for tenant in handled:
+        b = make_broker(keys=HashTagKeys(tenant=tenant),
+                        middlewares=[Idempotent(key=lambda m: m.body["rid"])])
+        def make_handler(t):
+            def handle(body):
+                handled[t].append(body["rid"])
+            return handle
+
+        b.subscribe(name, group="g", consumer=tenant, **fast())(make_handler(tenant))
+        b.start()
+        brokers.append(b)
+    for b in brokers:
+        b.publish(name, {"rid": "same-request"})  # same stream name and key, per tenant
+    assert wait_until(lambda: handled == {"t-1": ["same-request"], "t-2": ["same-request"]})
+
+
+def test_idempotent_with_plain_keys_keeps_the_original_marker(make_broker, r, name):
+    broker = make_broker(keys=PlainKeys(), middlewares=[Idempotent(key=lambda m: m.body["rid"])])
+    done = []
+    broker.subscribe(name, group="g", **fast())(lambda body: done.append(1))
+    broker.start()
+    broker.publish(name, {"rid": "a"})
+    assert wait_until(lambda: done and r.exists(f"rillkit:done:{name}:a"))

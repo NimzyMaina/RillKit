@@ -6,6 +6,16 @@ and written. Every command rillkit sends goes through the broker's key builder.
 ``PlainKeys`` (the default outside a cluster) keeps the names rillkit has always used, so an
 existing deployment sees the same keys. ``HashTagKeys`` (the default on a cluster) puts a stream,
 its DLQ and its heartbeats in one hash slot so the move to the DLQ can stay a transaction.
+
+Reserved for planned control-plane keys (worker state, directive dedup, node heartbeats, logs and
+producer cordons), so that adding them never moves or collides with existing keys:
+
+- ``PlainKeys``: names under ``rillkit:`` other than ``rillkit:workers:`` and ``rillkit:done:``,
+  namely ``rillkit:state:``, ``rillkit:dedup:``, ``rillkit:nodes:``, ``rillkit:ctl:``,
+  ``rillkit:logs:`` and ``rillkit:cordon:``.
+- ``HashTagKeys``: the control tag ``{<tenant>:}`` (``{:}`` without a tenant) inside each
+  prefix, and the suffixes ``logs`` and ``cordon`` after a stream's tag. No stream can produce
+  the control tag: stream names are non-empty and their colons are percent-encoded.
 """
 
 from typing import Optional
@@ -14,6 +24,7 @@ from .exceptions import ConfigurationError
 from .stream import Stream
 
 HEARTBEAT_PREFIX = "rillkit:workers:"
+IDEMPOTENCY_PREFIX = "rillkit:done:"
 _GLOB_SPECIAL = str.maketrans({c: f"\\{c}" for c in "*?[]\\"})
 
 
@@ -41,6 +52,13 @@ class KeyBuilder:
 
     def heartbeat(self, stream: Stream, group: str, consumer: str) -> str:
         return f"{self.heartbeat_prefix(stream, group)}{consumer}"
+
+    def idempotency(self, stream: Stream, key: str) -> str:
+        """Where ``Idempotent`` records that ``key`` was processed for ``stream``.
+
+        The default is the key rillkit has always used, so custom builders that do not override
+        it keep their existing markers."""
+        return f"{IDEMPOTENCY_PREFIX}{stream.name}:{key}"
 
 
 class PlainKeys(KeyBuilder):
@@ -75,11 +93,16 @@ class HashTagKeys(KeyBuilder):
         rk:{orders}:stream
         rk:{orders}:dlq                 (or rk:{orders}:dlq:<custom name>)
         rk:{orders}:workers:<group>:<consumer>
+        rk:{orders}:done:<idempotency key>
 
     ``tenant`` adds an opaque id inside the tag (``rk:{t-42:orders}:stream``) so tenants' keys
     never collide. It is for placement and naming only, not access control: take it from trusted
-    server-side context, never from a message. Braces, ``%`` and (in the tenant) ``:`` are
-    percent-encoded, so no name can escape or split the tag.
+    server-side context, never from a message.
+
+    Inside the tag, ``%``, ``{``, ``}`` and ``:`` are percent-encoded in both the stream name and
+    the tenant. A tag therefore holds exactly one unencoded ``:`` when there is a tenant and none
+    when there is not, so no name can escape the tag, and no stream name can produce another
+    tenant's keys or a tenant-scoped key.
 
     A custom ``Stream(dlq=...)`` becomes a suffix of the stream's own tag, so two streams that
     share a DLQ name on a single server get one DLQ each here.
@@ -94,7 +117,10 @@ class HashTagKeys(KeyBuilder):
         self.tenant = tenant
 
     def tag(self, stream: Stream) -> str:
-        name = _escape(stream.name)
+        if not stream.name:
+            # "{}" is not a hash tag, so the stream's keys would land in different slots
+            raise ConfigurationError("hash-tagged keys need a non-empty stream name")
+        name = _escape(stream.name, colon=True)
         if self.tenant is not None:
             name = f"{_escape(self.tenant, colon=True)}:{name}"
         return f"{{{name}}}"
@@ -111,6 +137,9 @@ class HashTagKeys(KeyBuilder):
 
     def heartbeat_prefix(self, stream: Stream, group: str) -> str:
         return f"{self._base(stream)}:workers:{group}:"
+
+    def idempotency(self, stream: Stream, key: str) -> str:
+        return f"{self._base(stream)}:done:{key}"
 
     def __repr__(self) -> str:
         return f"HashTagKeys(prefix={self.prefix!r}, tenant={self.tenant!r})"

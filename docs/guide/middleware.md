@@ -123,7 +123,7 @@ broker = Broker.from_env(middlewares=[Idempotent(key=lambda m: m.body["request_i
 | --- | --- | --- |
 | `key` | required | `Callable[[Message], str]` returning the idempotency key |
 | `ttl` | `604800` (7 days) | seconds the "done" marker is kept |
-| `prefix` | `"rillkit:done:"` | Key prefix; the full key is `<prefix><stream name>:<key>` |
+| `prefix` | `None` | Where markers go. `None` asks the broker's [key builder](/guide/keys#idempotent-markers): `rillkit:done:<stream>:<key>` with plain keys, `rk:{<stream>}:done:<key>` with hash-tagged keys (following its prefix and tenant). A string stores `<prefix><stream name>:<key>`. |
 
 When the key already exists, the middleware raises `AckMessage`, so the duplicate is acknowledged without running the handler. The marker is written only **after** the handler returns without raising, so failed attempts are still retried.
 

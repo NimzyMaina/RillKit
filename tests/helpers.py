@@ -34,6 +34,11 @@ def hk(stream: StreamLike, group: str, consumer: str) -> str:
     return KEYS.heartbeat(as_stream(stream), group, consumer)
 
 
+def ik(stream: StreamLike, key: str) -> str:
+    """Physical key of an Idempotent marker."""
+    return KEYS.idempotency(as_stream(stream), key)
+
+
 def wait_until(cond: Callable[[], Any], timeout: float = 10.0, interval: float = 0.02) -> bool:
     """Poll ``cond`` until it is truthy. Returns the final truthiness instead of raising."""
     deadline = time.monotonic() + timeout
