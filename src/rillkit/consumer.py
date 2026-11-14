@@ -353,7 +353,7 @@ class Subscriber:
         cluster). Otherwise the copy runs first: if the ack then fails the message stays pending,
         is retried and can reach the DLQ twice, but it is never lost.
         """
-        log.warning("moving message %s to %s: %s", msg.id, self.stream.dlq_name, error)
+        log.warning("moving message %s to %s: %s", msg.id, self.dlq_key, error)
         entry: dict[Any, Any] = dict(msg.raw)
         entry.update({
             "x-original-id": msg.id,
