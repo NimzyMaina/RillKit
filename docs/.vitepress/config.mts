@@ -3,11 +3,11 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'RillKit',
   description: 'Publish and consume Redis and Valkey streams in Python, with consumer groups, retries and a dead-letter queue',
-  base: '/rillkit/',
+  base: '/RillKit/',
   cleanUrls: true,
   lastUpdated: true,
 
-  head: [['link', { rel: 'icon', href: '/rillkit/logo.svg' }]],
+  head: [['link', { rel: 'icon', href: '/RillKit/logo.svg' }]],
 
   markdown: {
     // real editor themes: VS Code's default light, and Night Owl (blue-black) for dark
@@ -36,7 +36,7 @@ export default defineConfig({
       { text: 'Examples', link: '/examples/', activeMatch: '/examples/' },
       { text: 'Reference', link: '/reference/broker', activeMatch: '/reference/' },
       { text: 'PyPI', link: 'https://pypi.org/project/rillkit/' },
-      { text: 'GitHub', link: 'https://github.com/NimzyMaina/rillkit' },
+      { text: 'GitHub', link: 'https://github.com/NimzyMaina/RillKit' },
     ],
 
     sidebar: {
@@ -111,12 +111,12 @@ export default defineConfig({
     search: { provider: 'local' },
 
     editLink: {
-      pattern: 'https://github.com/NimzyMaina/rillkit/edit/main/docs/:path',
+      pattern: 'https://github.com/NimzyMaina/RillKit/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/NimzyMaina/rillkit' },
+      { icon: 'github', link: 'https://github.com/NimzyMaina/RillKit' },
     ],
 
     footer: {
