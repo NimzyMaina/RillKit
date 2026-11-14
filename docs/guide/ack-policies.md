@@ -27,10 +27,9 @@ import time
 from rillkit import AckMessage, AckPolicy, Broker, NackMessage, Stream
 
 logging.basicConfig(level=logging.CRITICAL)
-URL = "redis://localhost:6379/0"
 
 for policy in AckPolicy:
-    broker = Broker(URL)
+    broker = Broker.from_env()
     calls = []
     name = "tasks"
     broker.client.delete(name, name + "-dlq")
@@ -46,11 +45,9 @@ for policy in AckPolicy:
     time.sleep(1.5)
     pending = broker.client.xpending(name, "g")["pending"]
     dlq = broker.client.xlen(name + "-dlq")
+    broker.client.delete(name, name + "-dlq")
     broker.stop()
     print(f"{policy.value:14} handler calls={len(calls)} pending={pending} dlq={dlq}")
-    # note: stream key left over; cleaned by the runner next time
-    import redis
-    redis.Redis.from_url(URL).delete(name, name + "-dlq")
 ```
 
 ```text
@@ -96,7 +93,7 @@ import time
 from rillkit import AckMessage, Broker, Message, NackMessage, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 calls = []
 
 

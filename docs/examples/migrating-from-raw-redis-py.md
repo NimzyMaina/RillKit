@@ -1,6 +1,6 @@
 # Migrating from raw redis-py
 
-Here is the consumer loop most teams write first.
+Here is the consumer loop most teams write first. It is written with redis-py; a valkey-py loop looks the same and migrates the same way (set `RILLKIT_BACKEND=valkey` to keep using valkey-py).
 
 ## Before
 
@@ -57,7 +57,7 @@ from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 
 
 @broker.subscribe(Stream("orders", group="billing"), consumer="billing-1", block_ms=500)
@@ -93,10 +93,11 @@ The same two messages were processed. The group creation, the loop, JSON decodin
 | `xack` after success | `AckPolicy.NACK_ON_ERROR` (default) |
 | a hand-written `XAUTOCLAIM`/`XCLAIM` sweep | `claim_idle_ms`, `max_retries`, `backoff` |
 | a `failed` stream | `<stream>-dlq`, with `x-` context fields, and `replay_dlq` |
+| `redis.Redis.from_url(os.environ["REDIS_URL"])` | `Broker.from_env()`, which reads `RILLKIT_URL` and still honours `REDIS_URL` |
 
 ## Migrating safely
 
-1. Keep the **same stream name** and the **same group name**. RillKit then continues from the group's existing position and also finds your pending entries.
+1. Keep the **same stream name** and the **same group name**. RillKit then continues from the group's existing position and also finds your pending entries. On a single server the stream name *is* the key, so nothing moves. On a cluster RillKit uses [hash-tagged keys](/guide/keys) by default; set `RILLKIT_KEY_LAYOUT=plain` to keep reading the stream your old code wrote.
 2. Make sure the producers write JSON into a field called `data`. If your entries use other fields, see [Concepts](/guide/concepts#the-wire-format): an entry without `data` goes to the DLQ, so migrate the producer first or reshape the data.
 3. Stop the old consumers before starting RillKit ones, or give RillKit a **different consumer name** so the two do not fight. Old pending entries are claimed after `claim_idle_ms`.
 4. Check old pending entries first (`XPENDING`). RillKit counts the deliveries Redis has already recorded, so an entry that your old code retried more than `max_retries` times is dead-lettered as soon as RillKit claims it. Raise `max_retries` for the first run if that matters.

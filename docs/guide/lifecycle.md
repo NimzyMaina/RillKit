@@ -6,15 +6,15 @@
 
 | Step | When |
 | --- | --- |
-| 1. `@broker.on_startup` hooks | first, before anything touches Redis |
-| 2. `PING` | checks the connection, raises if Redis is unreachable |
+| 1. `@broker.on_startup` hooks | first, before anything touches the server |
+| 2. `PING` | checks the connection, raises if the server is unreachable |
 | 3. create consumer groups | `XGROUP CREATE ... MKSTREAM` for each subscriber |
 | 4. start consumer threads | one daemon thread per subscriber |
 | 5. `@broker.after_startup` hooks | groups exist and consumers are running |
 | | *... messages flow ...* |
 | 6. stop consumers | each finishes its current message and exits |
-| 7. `@broker.on_shutdown` hooks | consumers are done; the Redis client is still open |
-| 8. close the Redis client | |
+| 7. `@broker.on_shutdown` hooks | consumers are done; the client is still open |
+| 8. close the client | |
 | 9. `@broker.after_shutdown` hooks | the client is closed |
 
 ```python [g_lifecycle.py]
@@ -24,7 +24,7 @@ import time
 from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 
 
 @broker.on_startup
@@ -66,10 +66,10 @@ INFO consumer stopped | stream: tasks | consumer: c1
 4. after_shutdown: client closed
 ```
 
-Hooks are plain functions that take no arguments, run in the order registered, and can be used as decorators. Use `on_startup` to build resources your handlers need, `on_shutdown` to flush buffers while Redis is still usable, and `after_shutdown` to release anything else.
+Hooks are plain functions that take no arguments, run in the order registered, and can be used as decorators. Use `on_startup` to build resources your handlers need, `on_shutdown` to flush buffers while the server is still reachable, and `after_shutdown` to release anything else.
 
 ::: tip The `ping` is a feature
-If Redis is down at startup, `start()` raises a `redis.ConnectionError` straight away, so a process manager can restart you, instead of running with silent dead consumers.
+If the server is down at startup, `start()` raises the client's `ConnectionError` (`redis.ConnectionError` or `valkey.ConnectionError`) straight away, so a process manager can restart you, instead of running with silent dead consumers.
 :::
 
 ## run() versus start()/stop()
@@ -108,7 +108,7 @@ import time
 from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.WARNING)
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 
 
 @broker.subscribe(Stream("tasks", group="g"), consumer="c1", block_ms=200, count=10)
@@ -120,11 +120,8 @@ broker.start()
 for i in range(5):
     broker.publish("tasks", {"n": i})
 time.sleep(0.5)
-c = broker.client
 broker.stop()
-import redis
-r = redis.Redis.from_url("redis://localhost:6379/0")
-print("pending after stop:", r.xpending("tasks", "g")["pending"])
+print("pending after stop:", Broker.from_env().client.xpending("tasks", "g")["pending"])
 ```
 
 ```text
@@ -137,17 +134,17 @@ A full SIGTERM run, with the exact output, is in the [graceful shutdown example]
 
 ## Running several worker processes
 
-A consumer group is designed for this. Start the same program several times, in several processes or containers, and Redis spreads the entries between them:
+A consumer group is designed for this. Start the same program several times, in several processes or containers, and the server spreads the entries between them:
 
 - Every process uses the same `group`.
 - Every process needs a **distinct consumer name**. The default `<group>-<hostname>-<pid>` is unique across machines and processes. Set `consumer=` yourself if you run containers that share a hostname and PID (for instance PID 1 with a fixed hostname).
-- Each process gets its own `Broker` and its own Redis connection.
+- Each process gets its own `Broker` and its own connection.
 - Pending messages of a crashed worker are picked up by the survivors after `claim_idle_ms`.
 
 See [multiple workers](/examples/multiple-workers) and [Operations](/guide/operations#scaling).
 
 ## After stop
 
-`stop()` closes the Redis client, including a client you passed in yourself. Treat a stopped broker as finished, and create a new `Broker` if you need to publish or consume again.
+`stop()` closes the client, including a client you passed in yourself. Treat a stopped broker as finished, and create a new `Broker` if you need to publish or consume again.
 
 `stop()` is safe to call more than once, and from another thread while `run()` is blocking: the shutdown hooks run and the client closes only once.

@@ -44,7 +44,7 @@ exit code: 0
 ```
 
 - `shutdown requested` appeared right after the signal, but the handler was **allowed to finish** report 1 (`finished report 1`) before the consumer stopped.
-- `on_shutdown` (`flushing buffers`) ran after the consumer stopped, while the Redis client was still open.
+- `on_shutdown` (`flushing buffers`) ran after the consumer stopped, while the client was still open.
 - Report 2 had already been fetched in the same batch. It was not started, and stays pending until another worker claims it after `claim_idle_ms`. Use a small `count` if you want quick handover.
 - `exit code: 0` means the process shut down cleanly, which is what supervisors want to see.
 
@@ -62,7 +62,7 @@ After=network-online.target redis.service
 
 [Service]
 ExecStart=/srv/app/.venv/bin/python -m app.worker
-Environment=REDIS_URL=redis://localhost:6379/0
+Environment=RILLKIT_URL=redis://localhost:6379/0
 Restart=on-failure
 KillSignal=SIGTERM
 TimeoutStopSec=30

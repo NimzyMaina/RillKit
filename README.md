@@ -16,7 +16,7 @@ pip install "rillkit[valkey]"   # optional valkey-py client
 from rillkit import Broker, Stream
 
 orders = Stream("orders", group="workers")
-broker = Broker.from_env()  # REDIS_URL, or REDIS_HOST / REDIS_PORT / REDIS_PASSWORD / REDIS_SSL
+broker = Broker.from_env()  # RILLKIT_URL (REDIS_URL and REDIS_HOST/PORT/... still work)
 
 
 @broker.subscribe(orders, max_retries=3)
@@ -41,9 +41,11 @@ if __name__ == "__main__":
 - `on_startup`, `after_startup`, `on_shutdown`, `after_shutdown` hooks and graceful SIGTERM shutdown
 - Worker heartbeats: `broker.active_workers(stream)` includes idle workers
 - Stack `@broker.publisher(...)` under `@broker.subscribe(...)` to publish a handler's return value
-- The wire format is a single `data` field holding JSON, so plain redis-py producers interoperate
-- Redis or Valkey (`RILLKIT_BACKEND=valkey`), standalone or Cluster (`RILLKIT_MODE=cluster`), with
-  the stream and its DLQ in one hash slot so the move to the DLQ stays a transaction
+- The wire format is a single `data` field holding JSON, so plain redis-py or valkey-py producers interoperate
+- Redis or Valkey (`RILLKIT_BACKEND=valkey`), standalone or Cluster (`RILLKIT_MODE=cluster`)
+- Key builders map stream names to keys: the original names on one server, hash-tagged keys on a
+  cluster so a stream and its DLQ share a slot and the move to the DLQ stays a transaction, plus
+  prefixes and tenant ids (`HashTagKeys(prefix="billing", tenant="t-42")`)
 
 ## Development
 

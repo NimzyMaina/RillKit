@@ -12,14 +12,13 @@ from rillkit import Broker, Message, Stream
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
-URL = "redis://localhost:6379/0"
 TASKS = Stream("tasks", group="workers")
 handled = collections.Counter()
 lock = threading.Lock()
 
 
 def make_worker(name: str) -> Broker:
-    broker = Broker(URL)
+    broker = Broker.from_env()
 
     @broker.subscribe(TASKS, consumer=name, count=2, block_ms=200)
     def work(task: dict, msg: Message):
@@ -52,7 +51,7 @@ active workers: ['worker-1', 'worker-2', 'worker-3']
 handled per consumer: {'worker-1': 9, 'worker-2': 11, 'worker-3': 10} total: 30
 ```
 
-- Each `Broker` has its own Redis connection and its own consumer name (`worker-1` to `worker-3`).
+- Each `Broker` has its own connection and its own consumer name (`worker-1` to `worker-3`).
 - Every task was handled: the total is 30. The split between workers varies from run to run.
 - `active_workers` listed all three, from their heartbeats, even though they had not all received a message yet.
 

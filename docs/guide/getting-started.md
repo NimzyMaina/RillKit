@@ -1,6 +1,6 @@
 # Getting started
 
-RillKit is a small, synchronous, thread-based library for [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). You decorate a function, RillKit reads messages from a stream, calls your function, and takes care of acknowledging, retrying and dead-lettering.
+RillKit is a small, synchronous, thread-based library for [streams](https://redis.io/docs/latest/develop/data-types/streams/) on Redis and Valkey, through redis-py or valkey-py, on one server or a cluster. You decorate a function, RillKit reads messages from a stream, calls your function, and takes care of acknowledging, retrying and dead-lettering.
 
 ## Install
 
@@ -31,7 +31,7 @@ from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 
 
 @broker.subscribe(Stream("orders", group="billing"), block_ms=1000)
@@ -45,11 +45,14 @@ if __name__ == "__main__":
     broker.run()
 ```
 
-Run it:
+Point it at your server and run it:
 
 ```bash
+export RILLKIT_URL=redis://localhost:6379/0
 python app.py
 ```
+
+`Broker.from_env()` reads `RILLKIT_URL` (and `RILLKIT_BACKEND`, `RILLKIT_MODE` when you need valkey-py or a cluster). Every example in these docs connects this way. Deployments that set `REDIS_URL` keep working; see [Configuration](/guide/configuration#environment-variables).
 
 You will see something like this (stop it with `Ctrl+C`):
 

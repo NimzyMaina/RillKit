@@ -6,14 +6,13 @@ Requires `pip install "rillkit[pydantic]"`.
 import logging
 import time
 
-import redis
 from pydantic import BaseModel
 
 from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 ORDERS = Stream("orders-typed", group="billing")
 
 

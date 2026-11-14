@@ -35,7 +35,7 @@ class Settings:
 | `mode` | `"standalone"` | `"standalone"` or `"cluster"`. |
 | `username` | `None` | ACL username. Used only when `url` has no credentials. |
 | `cluster_nodes` | `()` | Cluster seed nodes: `"host:port"` or `(host, port)`. A comma-separated string also works. |
-| `key_layout` | `None` | `"plain"` or `"hashtag"`; `None` means plain standalone and hash-tagged on a cluster. See [key layout](/guide/cluster#key-layout). |
+| `key_layout` | `None` | `"plain"` or `"hashtag"`; `None` means plain standalone and hash-tagged on a cluster. See [Keys](/guide/keys). |
 | `client_kwargs` | `{}` | Extra options for the client constructor, checked against what that client accepts. See [client options](/guide/configuration#client-options). |
 
 Invalid values raise [`ConfigurationError`](/reference/exceptions) when the `Settings` is created (`backend`, `mode`, `key_layout`, `cluster_nodes`) or when the client is built (`client_kwargs`, cluster database).
@@ -53,7 +53,16 @@ Reads these environment variables. Keyword arguments override them.
 | Variable | Maps to | Default if unset |
 | --- | --- | --- |
 | `RILLKIT_URL` | `url` (wins over `<prefix>URL`) | `None` |
-| `<prefix>URL` | `url` | `None` |
+| `RILLKIT_BACKEND` | `backend` | `"redis"` |
+| `RILLKIT_MODE` | `mode` | `"standalone"` |
+| `RILLKIT_CLUSTER_NODES` | `cluster_nodes`, comma-separated | `()` |
+| `RILLKIT_KEY_LAYOUT` | `key_layout` | `None` |
+
+The variables RillKit 0.1 read are still supported, with `prefix` (`REDIS_` by default) in front:
+
+| Variable | Maps to | Default if unset |
+| --- | --- | --- |
+| `<prefix>URL` | `url`, when `RILLKIT_URL` is not set | `None` |
 | `<prefix>HOST` | `host` | `"localhost"` |
 | `<prefix>PORT` | `port` (as `int`) | `6379` |
 | `<prefix>DB` | `db` (as `int`) | `0` |
@@ -61,10 +70,6 @@ Reads these environment variables. Keyword arguments override them.
 | `<prefix>PASSWORD` | `password`, only without a URL | `None` |
 | `<prefix>SSL` | `ssl`: true for `1`, `true`, `yes` (any case) | `False` |
 | `<prefix>SOCKET_TIMEOUT` | `socket_timeout`: seconds, or `none`/`off`/`0` | `15.0` |
-| `RILLKIT_BACKEND` | `backend` | `"redis"` |
-| `RILLKIT_MODE` | `mode` | `"standalone"` |
-| `RILLKIT_CLUSTER_NODES` | `cluster_nodes`, comma-separated | `()` |
-| `RILLKIT_KEY_LAYOUT` | `key_layout` | `None` |
 
 ## `Settings.client`
 

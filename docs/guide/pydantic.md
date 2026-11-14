@@ -14,14 +14,13 @@ Annotate the handler parameter with a model class. RillKit calls `Model.model_va
 import logging
 import time
 
-import redis
 from pydantic import BaseModel
 
 from rillkit import Broker, Stream
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 ORDERS = Stream("orders-typed", group="billing")
 
 

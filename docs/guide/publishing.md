@@ -11,7 +11,7 @@ entry_id = broker.publish(stream, body, maxlen=None)
 ```python [g_publishing.py]
 from rillkit import Broker, PublishError, Stream
 
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 
 entry_id = broker.publish("events", {"type": "signup", "user": 42})
 print("entry id:", entry_id)
@@ -95,7 +95,7 @@ def handle(order: dict) -> dict:
 
 ## Errors: `PublishError`
 
-If Redis is down, or the body cannot be encoded, `publish` raises [`PublishError`](/reference/exceptions) with the original error chained as `__cause__`:
+If the server is down, or the body cannot be encoded, `publish` raises [`PublishError`](/reference/exceptions) with the original error chained as `__cause__`:
 
 ```python
 from rillkit import PublishError

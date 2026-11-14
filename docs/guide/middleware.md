@@ -14,7 +14,7 @@ You write a subclass of `BaseMiddleware` and override any of four hooks:
 Attach middleware in any of these ways:
 
 ```python
-broker = Broker(url, middlewares=[Timing(), Idempotent(key=...)])  # for every subscriber
+broker = Broker.from_env(middlewares=[Timing(), Idempotent(key=...)])  # for every subscriber
 broker.use(Timing())                                               # same, after construction
 
 @broker.subscribe(stream, middlewares=[RateLimit()])               # this subscriber only
@@ -71,7 +71,7 @@ class AddTraceId(BaseMiddleware):
         return call_next(cmd)
 
 
-broker = Broker("redis://localhost:6379/0", middlewares=[Tracer("A"), AddTraceId()])
+broker = Broker.from_env(middlewares=[Tracer("A"), AddTraceId()])
 
 
 @broker.subscribe(Stream("tasks", group="g"), consumer="c1", block_ms=200, middlewares=[Tracer("B")])
@@ -111,19 +111,19 @@ B.after_processed exc=None
 
 ## Idempotent
 
-Redis delivers **at least once**: a worker that crashes after finishing but before acking will see the message again. `Idempotent` makes reprocessing a no-op:
+Streams deliver **at least once**: a worker that crashes after finishing but before acking will see the message again. `Idempotent` makes reprocessing a no-op:
 
 ```python
 from rillkit import Broker, Idempotent
 
-broker = Broker(url, middlewares=[Idempotent(key=lambda m: m.body["request_id"])])
+broker = Broker.from_env(middlewares=[Idempotent(key=lambda m: m.body["request_id"])])
 ```
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `key` | required | `Callable[[Message], str]` returning the idempotency key |
 | `ttl` | `604800` (7 days) | seconds the "done" marker is kept |
-| `prefix` | `"rillkit:done:"` | Redis key prefix; the full key is `<prefix><stream name>:<key>` |
+| `prefix` | `"rillkit:done:"` | Key prefix; the full key is `<prefix><stream name>:<key>` |
 
 When the key already exists, the middleware raises `AckMessage`, so the duplicate is acknowledged without running the handler. The marker is written only **after** the handler returns without raising, so failed attempts are still retried.
 
