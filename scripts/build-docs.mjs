@@ -19,7 +19,7 @@
 // Options:
 //   --out <dir>        output dir                     (default .docs-build/site)
 //   --cache <dir>      snapshot cache dir             (default .docs-build/cache)
-//   --base <path>      site base                      (default /rillkit/)
+//   --base <path>      site base                      (default /RillKit/)
 //   --ref <tag>=<rev>  pretend <tag> points at <rev>, e.g. --ref v0.1.1=6cc2b51
 //                      (repeatable; for testing without creating tags)
 //   --no-tags          ignore real tags, only use --ref ones
@@ -45,7 +45,7 @@ const { values: opts } = parseArgs({
   options: {
     out: { type: 'string', default: '.docs-build/site' },
     cache: { type: 'string', default: '.docs-build/cache' },
-    base: { type: 'string', default: '/rillkit/' },
+    base: { type: 'string', default: '/RillKit/' },
     ref: { type: 'string', multiple: true, default: [] },
     'no-tags': { type: 'boolean', default: false },
     'no-cache': { type: 'boolean', default: false },
