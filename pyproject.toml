@@ -28,6 +28,7 @@ dependencies = ["redis>=5.0"]
 
 [project.optional-dependencies]
 pydantic = ["pydantic>=2.0"]
+valkey = ["valkey>=6.1.1,<6.3"]
 
 [project.urls]
 Homepage = "https://nimzymaina.github.io/rillkit/"
@@ -36,7 +37,16 @@ Repository = "https://github.com/NimzyMaina/rillkit"
 Issues = "https://github.com/NimzyMaina/rillkit/issues"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-timeout>=2", "pydantic>=2", "ruff>=0.6", "mypy>=1.10", "build", "twine"]
+dev = [
+    "pytest>=8",
+    "pytest-timeout>=2",
+    "pydantic>=2",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "build",
+    "twine",
+    "valkey>=6.1.1,<6.3",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rillkit"]
@@ -47,6 +57,10 @@ include = ["src", "tests", "README.md", "LICENSE", "pyproject.toml"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 timeout = 60
+markers = [
+    "standalone_only: needs a standalone server (skipped when RILLKIT_TEST_MODE=cluster)",
+    "cluster_only: needs a cluster (RILLKIT_TEST_MODE=cluster)",
+]
 
 [tool.ruff]
 line-length = 100
