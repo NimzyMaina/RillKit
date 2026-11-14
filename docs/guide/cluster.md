@@ -82,7 +82,7 @@ export RILLKIT_URL="rediss://app:secret@10.0.0.1:7000"            # first seed, 
 export RILLKIT_CLUSTER_NODES=10.0.0.2:7000,10.0.0.3:7000          # more seeds
 ```
 
-Credentials can instead come from `REDIS_USERNAME`, `REDIS_PASSWORD` and `REDIS_SSL=true`, which are read when no URL is set.
+Credentials can instead come from `RILLKIT_USERNAME`, `RILLKIT_PASSWORD` and `RILLKIT_SSL=true`, which are read when no URL is set (seeds then come from `RILLKIT_CLUSTER_NODES`).
 
 You can also pass a `redis.RedisCluster` or `valkey.ValkeyCluster` you built yourself as `Broker(client=...)`. RillKit notices it is a cluster client and uses hash-tagged keys.
 
