@@ -12,6 +12,9 @@ New:
 
 - `RILLKIT_HOST`, `RILLKIT_PORT`, `RILLKIT_DB`, `RILLKIT_USERNAME`, `RILLKIT_PASSWORD`, `RILLKIT_SSL` and `RILLKIT_SOCKET_TIMEOUT`, each winning over its `REDIS_` name. A URL still replaces the separate fields; setting one of them next to a URL now logs a warning. See [environment variables](/guide/configuration#environment-variables).
 - `KeyBuilder.idempotency(stream, key)`: `Idempotent` markers follow the broker's key builder, so brokers with different prefixes or tenants no longer share them. See [`Idempotent` markers](/guide/keys#idempotent-markers).
+- A consumer registry per stream and group (`KeyBuilder.consumers`). `active_workers` reads it instead of scanning for heartbeat keys, so it works for ACL users that may not run `SCAN`. See [several tenants on one server](/guide/keys#several-tenants-on-one-server) for an ACL rule that hides other tenants' key names.
+
+For **everyone**: `active_workers` only lists workers running 0.3 or newer, since older workers write no registry entry. Upgrade all workers of a group together, or expect older ones to be missing from `active_workers` until they are upgraded. Heartbeat keys themselves are unchanged.
 
 Changes for **`HashTagKeys`** users (clusters, or `RILLKIT_KEY_LAYOUT=hashtag`):
 

@@ -212,7 +212,7 @@ def test_heartbeat_registered_while_running_and_removed_after_stop(broker: Broke
     assert 0 < r.ttl(key) <= 60
     broker.stop(timeout=5)
     assert not r.exists(key)
-    assert broker.active_workers(name, "g") == []
+    assert Broker(client=r).active_workers(name, "g") == []  # a stopped broker's client is closed
 
 
 def test_active_workers_uses_stream_group_by_default(broker: Broker, name):
@@ -319,3 +319,41 @@ def test_injected_client_is_used_as_is(server_settings):
         assert broker.keys.stream(Stream("o")) == "app:{o}:stream"
     finally:
         client.close()
+
+
+def test_registry_lists_live_consumers_without_scan(broker: Broker, r, name, monkeypatch):
+    import time as _time
+
+    from helpers import ck
+
+    @broker.subscribe(name, group="g", consumer="worker-7", heartbeat_ttl=30, **fast())
+    def handle(body): ...
+
+    def no_scan(*args, **kwargs):
+        raise AssertionError("active_workers must not SCAN")
+
+    monkeypatch.setattr(broker.client, "scan_iter", no_scan)
+    broker.start()
+    assert wait_until(lambda: broker.active_workers(name, "g") == ["worker-7"])
+    expires = r.zscore(ck(name, "g"), "worker-7")
+    assert 25_000 < expires - _time.time() * 1000 <= 30_000  # alive until now + heartbeat_ttl
+    broker.stop(timeout=5)
+    assert r.zscore(ck(name, "g"), "worker-7") is None  # removed on a clean stop
+    assert Broker(client=r).active_workers(name, "g") == []
+
+
+def test_registry_ignores_expired_entries_and_beats_prune_them(broker: Broker, r, name):
+    import time as _time
+
+    from helpers import ck
+
+    now_ms = int(_time.time() * 1000)
+    r.zadd(ck(name, "g"), {"crashed": now_ms - 1000, "alive-elsewhere": now_ms + 60_000})
+    assert broker.active_workers(name, "g") == ["alive-elsewhere"]
+
+    @broker.subscribe(name, group="g", consumer="worker-7", **fast())
+    def handle(body): ...
+
+    broker.start()
+    assert wait_until(lambda: r.zscore(ck(name, "g"), "crashed") is None)  # pruned by a beat
+    assert broker.active_workers(name, "g") == ["alive-elsewhere", "worker-7"]

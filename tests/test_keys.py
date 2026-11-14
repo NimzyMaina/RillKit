@@ -43,6 +43,17 @@ def test_idempotency_keys():
             == "shop:{t-42:orders}:done:req-1")
 
 
+def test_consumer_registry_keys():
+    s = Stream("orders:eu")
+    assert PlainKeys().consumers(s, "billing") == "rillkit:consumers:orders%3Aeu:billing"
+    assert HashTagKeys().consumers(Stream("orders"), "billing") == "rk:{orders}:consumers:billing"
+    assert (HashTagKeys(prefix="shop", tenant="t-42").consumers(Stream("orders"), "billing")
+            == "shop:{t-42:orders}:consumers:billing")
+    # a stream name with a colon can't run into the group name
+    assert (PlainKeys().consumers(Stream("a:b"), "c")
+            != PlainKeys().consumers(Stream("a"), "b:c"))
+
+
 def test_custom_builders_keep_the_original_idempotency_key():
     from rillkit import KeyBuilder
 
@@ -75,9 +86,11 @@ def test_keys_are_unique_across_tenants_and_names():
         keys = HashTagKeys(tenant=tenant)
         s = Stream(name, dlq="d")
         for kind, key in (("stream", keys.stream(s)), ("dlq", keys.dlq(s)),
-                          ("hb", keys.heartbeat(s, "g", "c")), ("done", keys.idempotency(s, "k"))):
+                          ("hb", keys.heartbeat(s, "g", "c")), ("done", keys.idempotency(s, "k")),
+                          ("consumers", keys.consumers(s, "g"))):
             assert seen.setdefault(key, (tenant, name, kind)) == (tenant, name, kind), key
-        assert len({slot(keys.stream(s)), slot(keys.dlq(s)), slot(keys.idempotency(s, "k"))}) == 1
+        assert len({slot(keys.stream(s)), slot(keys.dlq(s)), slot(keys.idempotency(s, "k")),
+                    slot(keys.consumers(s, "g"))}) == 1
 
 
 def test_no_stream_tag_can_equal_the_reserved_control_tag():

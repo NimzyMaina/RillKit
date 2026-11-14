@@ -17,6 +17,7 @@ RillKit's original names, unchanged since 0.1.
 | `heartbeat_prefix(stream, group)` | `rillkit:workers:<name>:<group>:` |
 | `heartbeat(stream, group, consumer)` | `rillkit:workers:<name>:<group>:<consumer>` |
 | `idempotency(stream, key)` | `rillkit:done:<name>:<key>` |
+| `consumers(stream, group)` | `rillkit:consumers:<name>:<group>` (`:` and `%` in the name encoded) |
 
 ## `HashTagKeys(prefix="rk", tenant=None)`
 
@@ -28,6 +29,7 @@ Everything for one stream in one cluster slot.
 | `dlq(stream)` | `rk:{<name>}:dlq`, or `rk:{<name>}:dlq:<custom name>` |
 | `heartbeat(stream, group, consumer)` | `rk:{<name>}:workers:<group>:<consumer>` |
 | `idempotency(stream, key)` | `rk:{<name>}:done:<key>` |
+| `consumers(stream, group)` | `rk:{<name>}:consumers:<group>` |
 | `tag(stream)` | `{<name>}`, or `{<tenant>:<name>}` |
 
 - `prefix` may be empty, and cannot contain braces.
@@ -39,7 +41,7 @@ See [Keys](/guide/keys) for annotated examples of every key.
 
 ## `KeyBuilder`
 
-Subclass it to use your own layout. Implement `stream`, `dlq` and `heartbeat_prefix`; `heartbeat` defaults to the prefix followed by the consumer name, and `idempotency` defaults to `rillkit:done:<name>:<key>`. For the DLQ move to be a transaction on a cluster, `stream` and `dlq` must hash to the same slot; otherwise it runs in two steps (see [DLQ atomicity](/guide/cluster#dlq-atomicity)).
+Subclass it to use your own layout. Implement `stream`, `dlq` and `heartbeat_prefix`; `heartbeat` defaults to the prefix followed by the consumer name, `idempotency` defaults to `rillkit:done:<name>:<key>`, and `consumers` to `rillkit:consumers:<name>:<group>`. For the DLQ move to be a transaction on a cluster, `stream` and `dlq` must hash to the same slot; otherwise it runs in two steps (see [DLQ atomicity](/guide/cluster#dlq-atomicity)).
 
 ```python
 from rillkit import Broker, KeyBuilder, Stream

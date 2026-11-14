@@ -2,6 +2,7 @@ import logging
 import signal
 import sys
 import threading
+import time
 from collections.abc import Sequence
 from functools import partial
 from typing import Any, Callable, Optional
@@ -10,7 +11,7 @@ from .ack import AckPolicy
 from .clients import CLIENT_ERRORS, Client, is_cluster, run_together
 from .consumer import Subscriber, _text
 from .exceptions import PublishError
-from .keys import HashTagKeys, KeyBuilder, PlainKeys, glob_escape
+from .keys import HashTagKeys, KeyBuilder, PlainKeys
 from .middleware import BaseMiddleware, PublishCommand
 from .settings import Settings
 from .stream import Stream, StreamLike, as_stream
@@ -265,13 +266,14 @@ class Broker:
         """Consumer names with a live heartbeat. Unlike XINFO CONSUMERS this includes idle workers
         that have not received a message yet.
 
-        On a cluster every primary is scanned, and a key seen twice (during a slot migration) is
-        counted once. If a node cannot be reached the client error is raised rather than
-        returning a partial list."""
+        Reads the consumer registry (``broker.keys.consumers``), one sorted set per stream and
+        group, so it needs no ``SCAN`` and works for ACL users that may not list keys. Expiry is
+        judged by the workers' and caller's clocks, which should agree within the heartbeat TTL.
+        Workers older than 0.3, which write no registry entry, are not listed."""
         s = as_stream(stream)
-        prefix = self.keys.heartbeat_prefix(s, str(group or s.group))
-        found = {_text(k) for k in self.client.scan_iter(match=f"{glob_escape(prefix)}*")}
-        return sorted(k[len(prefix):] for k in found)
+        key = self.keys.consumers(s, str(group or s.group))
+        members: Any = self.client.zrangebyscore(key, int(time.time() * 1000), "+inf")
+        return sorted(_text(m) for m in members)
 
     def replay_dlq(self, stream: StreamLike, count: int = 100) -> int:
         """Move up to ``count`` entries from the DLQ back onto the stream. Returns how many.

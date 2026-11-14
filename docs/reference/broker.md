@@ -129,7 +129,7 @@ Each takes a function with no arguments, registers it and returns it, so it work
 
 | Method | Description |
 | --- | --- |
-| `active_workers(stream, group: Optional[str] = None) -> list[str]` | Sorted consumer names that have a live heartbeat for the stream and group. `group` defaults to the `Stream`'s group. On a cluster every primary is scanned; an unreachable node raises instead of returning a partial list. |
+| `active_workers(stream, group: Optional[str] = None) -> list[str]` | Sorted consumer names that have a live heartbeat for the stream and group. `group` defaults to the `Stream`'s group. Reads the consumer registry (`broker.keys.consumers(stream, group)`), so it needs no `SCAN`. Expiry is judged by the clocks of the workers and the caller, which should agree to within the heartbeat TTL. |
 | `replay_dlq(stream, count: int = 100) -> int` | Moves up to `count` entries from the stream's DLQ back onto the stream, without the `x-` fields, deleting them from the DLQ. Returns how many were moved. Pass the **original** stream. Each move is a transaction when the stream and DLQ share a slot; otherwise it adds before it deletes (see [DLQ atomicity](/guide/cluster#dlq-atomicity)). |
 
 ## Publisher
