@@ -14,10 +14,10 @@ from typing import (
     get_type_hints,
 )
 
-import redis
-
 from .ack import AckPolicy
+from .clients import RESPONSE_ERRORS, Client, run_together, socket_timeout
 from .exceptions import AckMessage, DecodeError, NackMessage, RejectMessage
+from .keys import HEARTBEAT_PREFIX
 from .message import Message
 from .middleware import BaseMiddleware
 from .stream import Stream
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("rillkit")
 
 RETRY_BACKOFF_SECONDS = 5
-HEARTBEAT_PREFIX = "rillkit:workers:"
+__all__ = ["HEARTBEAT_PREFIX", "Subscriber"]
 
 
 def _text(value: Any) -> str:
@@ -37,21 +37,6 @@ def _text(value: Any) -> str:
 
 def _fields(raw: dict[Any, Any]) -> dict[str, str]:
     return {_text(k): _text(v) for k, v in raw.items()}
-
-
-def _socket_timeout(client: Any) -> Optional[float]:
-    """The read timeout a connection from this client will use, or None for no timeout."""
-    try:
-        conn = client.connection_pool.make_connection()
-    except Exception:
-        return None
-    try:
-        return getattr(conn, "socket_timeout", None) or getattr(conn, "_socket_timeout", None)
-    finally:
-        try:
-            conn.disconnect()
-        except Exception:
-            pass
 
 
 def _is_model(annotation: Any) -> bool:
@@ -129,8 +114,17 @@ class Subscriber:
         self._thread: Optional[threading.Thread] = None
 
     @property
-    def client(self) -> "redis.Redis":
+    def client(self) -> Client:
         return self.broker.client
+
+    @property
+    def stream_key(self) -> str:
+        """The physical key of the stream, from the broker's key builder."""
+        return self.broker.keys.stream(self.stream)
+
+    @property
+    def dlq_key(self) -> str:
+        return self.broker.keys.dlq(self.stream)
 
     @property
     def middlewares(self) -> list[BaseMiddleware]:
@@ -139,14 +133,14 @@ class Subscriber:
 
     @property
     def heartbeat_key(self) -> str:
-        return f"{HEARTBEAT_PREFIX}{self.stream.name}:{self.group}:{self.consumer}"
+        return self.broker.keys.heartbeat(self.stream, self.group, self.consumer)
 
     # lifecycle
 
     def setup(self) -> None:
         # A blocking read that outlasts the client's socket timeout fails and is retried by
         # redis-py, so keep the block time a second under the timeout.
-        timeout = _socket_timeout(self.client)
+        timeout = socket_timeout(self.client)
         if timeout is not None and self.block_ms / 1000 > timeout - 1:
             self._block_ms = max(100, int((timeout - 1) * 1000))
             log.warning(
@@ -155,10 +149,10 @@ class Subscriber:
             )
         try:
             self.client.xgroup_create(
-                self.stream.name, self.group, id=self.group_start_id, mkstream=True
+                self.stream_key, self.group, id=self.group_start_id, mkstream=True
             )
-            log.debug("created group %s on %s", self.group, self.stream.name)
-        except redis.exceptions.ResponseError as e:
+            log.debug("created group %s on %s", self.group, self.stream_key)
+        except RESPONSE_ERRORS as e:
             if "BUSYGROUP" not in str(e):
                 raise
 
@@ -192,12 +186,12 @@ class Subscriber:
                         if self._stop.is_set():
                             break  # unread leftovers stay pending, claimed after the idle time
                         self._process(msg)
-                except redis.exceptions.ResponseError as e:
+                except RESPONSE_ERRORS as e:
                     if "NOGROUP" in str(e):
                         self.setup()
                     else:
                         self._loop_error(e)
-                except Exception as e:  # redis or other loop-level error: keep the worker alive
+                except Exception as e:  # client or other loop-level error: keep the worker alive
                     self._loop_error(e)
         finally:
             if self.heartbeat:
@@ -224,11 +218,14 @@ class Subscriber:
     # reading
 
     def _message(self, id: Any, raw: dict[Any, Any], deliveries: int) -> Message:
-        return Message(_text(id), self.stream, _fields(raw), deliveries, self.consumer, self.client)
+        return Message(
+            _text(id), self.stream, _fields(raw), deliveries, self.consumer, self.client,
+            key=self.stream_key,
+        )
 
     def _read(self) -> list[Message]:
         result: Any = self.client.xreadgroup(
-            self.group, self.consumer, {self.stream.name: ">"},
+            self.group, self.consumer, {self.stream_key: ">"},
             count=self.count, block=self._block_ms,
         )
         return [self._message(i, f, 1) for _, entries in result or [] for i, f in entries]
@@ -243,7 +240,7 @@ class Subscriber:
     def _claim(self) -> list[Message]:
         """Take over pending messages idle long enough, honouring the retry backoff."""
         pending: Any = self.client.xpending_range(
-            self.stream.name, self.group, "-", "+", self.count, idle=self.claim_idle_ms
+            self.stream_key, self.group, "-", "+", self.count, idle=self.claim_idle_ms
         )
         due = {
             _text(p["message_id"]): p["times_delivered"]
@@ -253,12 +250,12 @@ class Subscriber:
         if not due:
             return []
         claimed: Any = self.client.xclaim(
-            self.stream.name, self.group, self.consumer, self.claim_idle_ms, list(due)
+            self.stream_key, self.group, self.consumer, self.claim_idle_ms, list(due)
         )
         messages = []
         for id, raw in claimed:
             if raw is None:  # entry was trimmed from the stream while pending
-                self.client.xack(self.stream.name, self.group, id)
+                self.client.xack(self.stream_key, self.group, id)
                 continue
             attempts = due[_text(id)]
             if self._exhausted(attempts):
@@ -350,8 +347,13 @@ class Subscriber:
                 log.error("after_processed failed in %s: %s", type(mw).__name__, e)
 
     def _dead_letter(self, msg: Message, error: str) -> None:
-        """Copy the entry to the DLQ stream with context, then ack it so it stops being retried."""
-        log.warning("moving message %s to %s: %s", msg.id, self.stream.dlq_name, error)
+        """Copy the entry to the DLQ stream with context, then ack it so it stops being retried.
+
+        Both happen in one transaction when the stream and DLQ keys share a slot (always outside a
+        cluster). Otherwise the copy runs first: if the ack then fails the message stays pending,
+        is retried and can reach the DLQ twice, but it is never lost.
+        """
+        log.warning("moving message %s to %s: %s", msg.id, self.dlq_key, error)
         entry: dict[Any, Any] = dict(msg.raw)
         entry.update({
             "x-original-id": msg.id,
@@ -360,9 +362,9 @@ class Subscriber:
             "x-error": error[:1000],
             "x-deliveries": str(msg.deliveries),
         })
-        pipe = self.client.pipeline()
-        pipe.xadd(self.stream.dlq_name, entry)
-        pipe.xack(self.stream.name, self.group, msg.id)
-        pipe.execute()
+        run_together(self.client, [
+            ("xadd", (self.dlq_key, entry)),
+            ("xack", (self.stream_key, self.group, msg.id)),
+        ])
         msg.acked = True
         msg.nacked = False

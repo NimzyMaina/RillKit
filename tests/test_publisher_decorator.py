@@ -1,11 +1,11 @@
 import json
 
-from helpers import entries, fast, pending, read_count, settle, wait_until
+from helpers import dk, entries, fast, pending, read_count, settle, sk, wait_until
 from rillkit import Broker
 
 
 def _out(r, stream):
-    return [json.loads(f["data"]) for _, f in entries(r, stream)]
+    return [json.loads(f["data"]) for _, f in entries(r, sk(stream))]
 
 
 def test_subscribe_above_publisher_publishes_return_value(broker: Broker, r, name):
@@ -48,7 +48,7 @@ def test_none_return_does_not_publish(broker: Broker, r, name):
     broker.publish(name, {})
     assert wait_until(lambda: calls and pending(r, name) == 0)
     settle(0.2)
-    assert r.xlen(out) == 0
+    assert r.xlen(sk(out)) == 0
 
 
 def test_falsy_non_none_return_is_published(broker: Broker, r, name):
@@ -108,7 +108,7 @@ def test_publisher_respects_maxlen(broker: Broker, r, name):
     for i in range(300):
         broker.publish(name, {"i": i})
     assert wait_until(lambda: pending(r, name) == 0 and read_count(r, name) == 300)
-    assert r.xlen(out) < 300
+    assert r.xlen(sk(out)) < 300
 
 
 def test_failing_handler_does_not_publish(broker: Broker, r, name):
@@ -123,5 +123,5 @@ def test_failing_handler_does_not_publish(broker: Broker, r, name):
 
     broker.start()
     broker.publish(name, {})
-    assert wait_until(lambda: r.xlen(f"{name}-dlq") == 1)
-    assert r.xlen(out) == 0
+    assert wait_until(lambda: r.xlen(dk(name)) == 1)
+    assert r.xlen(sk(out)) == 0

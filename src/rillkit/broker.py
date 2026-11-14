@@ -6,11 +6,11 @@ from collections.abc import Sequence
 from functools import partial
 from typing import Any, Callable, Optional
 
-import redis
-
 from .ack import AckPolicy
-from .consumer import HEARTBEAT_PREFIX, Subscriber, _text
+from .clients import CLIENT_ERRORS, Client, is_cluster, run_together
+from .consumer import Subscriber, _text
 from .exceptions import PublishError
+from .keys import HashTagKeys, KeyBuilder, PlainKeys, glob_escape
 from .middleware import BaseMiddleware, PublishCommand
 from .settings import Settings
 from .stream import Stream, StreamLike, as_stream
@@ -40,7 +40,7 @@ class Publisher:
 
 
 class Broker:
-    """Owns the Redis client, the subscribers and the lifecycle hooks.
+    """Owns the client, the subscribers and the lifecycle hooks.
 
         broker = Broker.from_env()
 
@@ -49,19 +49,32 @@ class Broker:
 
         broker.publish("orders", {"id": 1})
         broker.run()
+
+    ``client`` can be any redis-py or valkey-py client, standalone or cluster. It is used as is;
+    ``stop()`` closes it. ``keys`` picks the physical key layout; by default it comes from
+    ``settings.key_layout``, else plain keys on a standalone client and hash-tagged keys on a
+    cluster client.
     """
 
     def __init__(
         self,
         url: Optional[str] = None,
         *,
-        client: Optional["redis.Redis"] = None,
+        client: Optional[Client] = None,
         settings: Optional[Settings] = None,
         middlewares: Sequence[BaseMiddleware] = (),
+        keys: Optional[KeyBuilder] = None,
     ) -> None:
         if client is None:
-            client = (settings or Settings(url=url)).client()
+            settings = settings or Settings(url=url)
+            client = settings.client()
         self.client = client
+        if keys is None:
+            if settings is not None and settings.key_layout is not None:
+                keys = settings.key_builder()
+            else:
+                keys = HashTagKeys() if is_cluster(client) else PlainKeys()
+        self.keys: KeyBuilder = keys
         self.middlewares: list[BaseMiddleware] = []
         for mw in middlewares:
             self.use(mw)
@@ -149,9 +162,10 @@ class Broker:
         try:
             payload = cmd.stream.codec.encode(cmd.body)
             entry_id = self.client.xadd(
-                cmd.stream.name, {"data": payload}, maxlen=cmd.maxlen, approximate=cmd.approximate
+                self.keys.stream(cmd.stream), {"data": payload}, maxlen=cmd.maxlen,
+                approximate=cmd.approximate,
             )
-        except (redis.RedisError, TypeError, ValueError) as e:
+        except CLIENT_ERRORS + (TypeError, ValueError) as e:
             raise PublishError(f"could not publish to {cmd.stream.name}: {e}") from e
         return _text(entry_id)
 
@@ -249,23 +263,32 @@ class Broker:
 
     def active_workers(self, stream: StreamLike, group: Optional[str] = None) -> list[str]:
         """Consumer names with a live heartbeat. Unlike XINFO CONSUMERS this includes idle workers
-        that have not received a message yet."""
+        that have not received a message yet.
+
+        On a cluster every primary is scanned, and a key seen twice (during a slot migration) is
+        counted once. If a node cannot be reached the client error is raised rather than
+        returning a partial list."""
         s = as_stream(stream)
-        prefix = f"{HEARTBEAT_PREFIX}{s.name}:{group or s.group}:"
-        return sorted(_text(k)[len(prefix):] for k in self.client.scan_iter(match=f"{prefix}*"))
+        prefix = self.keys.heartbeat_prefix(s, str(group or s.group))
+        found = {_text(k) for k in self.client.scan_iter(match=f"{glob_escape(prefix)}*")}
+        return sorted(k[len(prefix):] for k in found)
 
     def replay_dlq(self, stream: StreamLike, count: int = 100) -> int:
-        """Move up to ``count`` entries from the DLQ back onto the stream. Returns how many."""
+        """Move up to ``count`` entries from the DLQ back onto the stream. Returns how many.
+
+        Each move is one transaction when the stream and DLQ keys share a slot (always outside a
+        cluster). Otherwise the entry is added to the stream first and then deleted from the DLQ,
+        so a failure in between can replay it twice but never drops it."""
         s = as_stream(stream)
+        stream_key, dlq_key = self.keys.stream(s), self.keys.dlq(s)
         moved = 0
-        rows: Any = self.client.xrange(s.dlq_name, count=count)
+        rows: Any = self.client.xrange(dlq_key, count=count)
         for entry_id, raw in rows:
             fields: dict[Any, Any] = {
                 _text(k): _text(v) for k, v in raw.items() if not _text(k).startswith("x-")
             }
-            pipe = self.client.pipeline()
-            pipe.xadd(s.name, fields)
-            pipe.xdel(s.dlq_name, entry_id)
-            pipe.execute()
+            run_together(
+                self.client, [("xadd", (stream_key, fields)), ("xdel", (dlq_key, entry_id))]
+            )
             moved += 1
         return moved

@@ -161,6 +161,8 @@ redis-cli XRANGE orders-dlq - +
 
 Nothing consumes the DLQ for you. Look at it, fix the cause, then replay.
 
+The copy and the acknowledgement happen in one `MULTI`/`EXEC` transaction, so a message is never in both places or in neither. On a cluster the DLQ key is `rk:{<stream>}:dlq` by default (`broker.keys.dlq(stream)` gives the exact key); see [DLQ atomicity](/guide/cluster#dlq-atomicity) for how the move works there.
+
 ## replay_dlq
 
 ```python

@@ -5,6 +5,10 @@ class RillkitError(Exception):
     """Base class for all rillkit errors."""
 
 
+class ConfigurationError(RillkitError, ValueError):
+    """The connection settings are invalid, contradictory or need a missing optional package."""
+
+
 class PublishError(RillkitError):
     """The message could not be written to the stream."""
 

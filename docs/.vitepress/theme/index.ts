@@ -1,3 +1,4 @@
+import { h } from 'vue'
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
 import '@fontsource-variable/bricolage-grotesque/opsz.css'
@@ -15,9 +16,16 @@ import RillBefore from './components/RillBefore.vue'
 import RillSpec from './components/RillSpec.vue'
 import RillStart from './components/RillStart.vue'
 import RillDivider from './components/RillDivider.vue'
+import VersionSwitcher from './components/VersionSwitcher.vue'
 
 export default {
   extends: DefaultTheme,
+  // version picker: in the top bar on wide screens, in the mobile menu otherwise
+  Layout: () =>
+    h(DefaultTheme.Layout, null, {
+      'nav-bar-content-after': () => h(VersionSwitcher),
+      'nav-screen-content-after': () => h(VersionSwitcher, { screen: true }),
+    }),
   enhanceApp({ app }) {
     app.component('RillHero', RillHero)
     app.component('RillConnect', RillConnect)

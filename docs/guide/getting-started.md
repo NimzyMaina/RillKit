@@ -11,11 +11,14 @@ pip install rillkit
 ```bash [pip + pydantic]
 pip install "rillkit[pydantic]"
 ```
+```bash [pip + valkey]
+pip install "rillkit[valkey]"
+```
 :::
 
-RillKit needs Python 3.9 or newer and `redis-py` 5 or newer. The `pydantic` extra is optional and only needed if you want handlers that receive validated models (see [Pydantic models](/guide/pydantic)).
+RillKit needs Python 3.9 or newer and `redis-py` 5 or newer. The `pydantic` extra is optional and only needed if you want handlers that receive validated models (see [Pydantic models](/guide/pydantic)). The `valkey` extra installs `valkey-py`, for when you would rather use the Valkey client library (see [Redis or Valkey](/guide/configuration#redis-or-valkey)).
 
-You also need a Redis server. Retries use the idle filter of `XPENDING`, so use **Redis 6.2 or newer**. Locally, `docker run -p 6379:6379 redis:7` is enough.
+You also need a Redis or Valkey server. Retries use the idle filter of `XPENDING`, so use **Redis 6.2 or newer**, or **Valkey 7.2 or newer**. Locally, `docker run -p 6379:6379 redis:7` or `docker run -p 6379:6379 valkey/valkey:8` is enough. Both work standalone or as a [cluster](/guide/cluster).
 
 ## Publish and consume in 20 lines
 
@@ -83,3 +86,5 @@ Because the example publishes on every start, running it repeatedly keeps adding
 - New to streams? Read [Concepts](/guide/concepts) first. It is short.
 - Want to see a handler fail and recover? [Retries and the DLQ](/guide/retries-and-dlq).
 - Want something you can copy? Browse the [examples](/examples/).
+- Running on Valkey or a cluster? [Configuration](/guide/configuration) and [Redis and Valkey Cluster](/guide/cluster).
+- Upgrading? [Upgrading](/guide/upgrading) has the notes, and the version picker in the top bar opens the docs of earlier releases. [All versions](/versions) lists every release with a link to what changed since the one before.
