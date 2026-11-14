@@ -18,7 +18,7 @@ from .middleware import BaseMiddleware, Idempotent, PublishCommand
 from .settings import Settings
 from .stream import Stream
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "AckMessage", "AckPolicy", "BaseMiddleware", "Broker", "Codec", "ConfigurationError",
