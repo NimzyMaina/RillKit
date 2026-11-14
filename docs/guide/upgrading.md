@@ -4,6 +4,22 @@
 
 The version picker in the top bar switches between the latest docs and the docs of every release, keeping you on the same page when it exists there. [All versions](/versions) lists each release with its tag, its docs, the release notes when there are any, and a GitHub compare link to the release before it, such as `https://github.com/NimzyMaina/RillKit/compare/v0.1.0...v0.1.1`. The compare view is the complete list of changes between two releases.
 
+## From 0.2 to 0.3
+
+**Single-server users with the default keys: nothing changes.** Stream, DLQ, heartbeat and `Idempotent` keys are identical.
+
+New:
+
+- `RILLKIT_HOST`, `RILLKIT_PORT`, `RILLKIT_DB`, `RILLKIT_USERNAME`, `RILLKIT_PASSWORD`, `RILLKIT_SSL` and `RILLKIT_SOCKET_TIMEOUT`, each winning over its `REDIS_` name. A URL still replaces the separate fields; setting one of them next to a URL now logs a warning. See [environment variables](/guide/configuration#environment-variables).
+- `KeyBuilder.idempotency(stream, key)`: `Idempotent` markers follow the broker's key builder, so brokers with different prefixes or tenants no longer share them. See [`Idempotent` markers](/guide/keys#idempotent-markers).
+
+Changes for **`HashTagKeys`** users (clusters, or `RILLKIT_KEY_LAYOUT=hashtag`):
+
+- `Idempotent` markers move from `rillkit:done:<stream>:<key>` to `rk:{<stream>}:done:<key>` (with your prefix and tenant). Markers written by 0.2 are not checked, so a message redelivered right after the upgrade can be processed once more. Pass `Idempotent(prefix="rillkit:done:")` to keep the 0.2 location.
+- Colons in stream names are now percent-encoded inside the tag: stream `orders:eu` moves from `rk:{orders:eu}:stream` to `rk:{orders%3Aeu}:stream`, and the same for its DLQ and heartbeats. Streams without a colon keep their keys. In 0.2, stream `t-42:orders` and stream `orders` with tenant `t-42` shared keys; they no longer can. Drain or move affected streams before upgrading (pending entries and DLQ entries stay under the old keys).
+- An empty stream name raises `ConfigurationError` instead of producing keys that do not share a slot.
+- Custom `KeyBuilder` subclasses keep `rillkit:done:<stream>:<key>` for markers unless they override `idempotency`.
+
 ## From 0.1 to 0.2: Redis and Valkey support
 
 Nothing changes for an existing Redis deployment. Upgrade and keep your configuration:

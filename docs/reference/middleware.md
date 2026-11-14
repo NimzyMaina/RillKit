@@ -36,7 +36,7 @@ What `publish_scope` receives. Mutate its fields to change what gets published.
 Idempotent(
     key: Callable[[Message], str],
     ttl: int = 7 * 24 * 3600,
-    prefix: str = "rillkit:done:",
+    prefix: Optional[str] = None,
 )
 ```
 
@@ -46,6 +46,6 @@ Skips messages whose key was already processed successfully.
 | --- | --- | --- |
 | `key` | required | Returns the idempotency key for a message, for example `lambda m: m.body["request_id"]`. |
 | `ttl` | `604800` | Seconds the done-marker is kept. |
-| `prefix` | `"rillkit:done:"` | Key prefix. The full key is `<prefix><stream name>:<key>`. |
+| `prefix` | `None` | `None`: the key is `broker.keys.idempotency(stream, key)`, i.e. `rillkit:done:<stream>:<key>` with `PlainKeys` and `<prefix>:{<tenant>:<stream>}:done:<key>` with `HashTagKeys`. A string: the key is `<prefix><stream name>:<key>`, whatever the layout. |
 
 Behaviour: if the key exists, it raises `AckMessage` (the duplicate is acknowledged and the handler is skipped). Otherwise it calls the handler and, if it returned without raising, stores the key with `SET ... EX ttl` and the message id as value.
