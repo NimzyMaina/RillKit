@@ -16,7 +16,7 @@ pip install "rillkit[valkey]"   # optional valkey-py client
 from rillkit import Broker, Stream
 
 orders = Stream("orders", group="workers")
-broker = Broker.from_env()  # RILLKIT_URL (REDIS_URL and REDIS_HOST/PORT/... still work)
+broker = Broker.from_env()  # RILLKIT_URL, or RILLKIT_HOST/PORT/...; REDIS_* still work
 
 
 @broker.subscribe(orders, max_retries=3)

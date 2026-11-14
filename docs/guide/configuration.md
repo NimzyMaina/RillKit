@@ -14,15 +14,38 @@ from rillkit import Broker
 broker = Broker.from_env()
 ```
 
-`Broker.from_env()` (and `Settings.from_env()`) read these:
+`Broker.from_env()` (and `Settings.from_env()`) read these. Every connection variable also has the name RillKit 0.1 used, so existing deployments need no change; when both are set, the `RILLKIT_` one wins.
 
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `RILLKIT_URL` | none | The server URL: `redis://`, `rediss://` (TLS) or `unix://`. On a cluster, one seed node |
-| `RILLKIT_BACKEND` | `redis` | The client library: `redis` (redis-py) or `valkey` (valkey-py) |
-| `RILLKIT_MODE` | `standalone` | `standalone` or `cluster` |
-| `RILLKIT_CLUSTER_NODES` | none | Cluster seed nodes, `host:port,host:port` |
-| `RILLKIT_KEY_LAYOUT` | depends on mode | `plain` or `hashtag`, see [Keys](/guide/keys) |
+| Variable | Also read as | Default | Notes |
+| --- | --- | --- | --- |
+| `RILLKIT_URL` | `REDIS_URL` | none | The server URL: `redis://`, `rediss://` (TLS) or `unix://`. On a cluster, one seed node |
+| `RILLKIT_HOST` | `REDIS_HOST` | `localhost` | used when no URL is set |
+| `RILLKIT_PORT` | `REDIS_PORT` | `6379` | used when no URL is set |
+| `RILLKIT_DB` | `REDIS_DB` | `0` | used when no URL is set |
+| `RILLKIT_USERNAME` | `REDIS_USERNAME` | none | used when no URL is set |
+| `RILLKIT_PASSWORD` | `REDIS_PASSWORD` | none | used when no URL is set |
+| `RILLKIT_SSL` | `REDIS_SSL` | off | `1`, `true` or `yes` (any case) turn TLS on. Used when no URL is set |
+| `RILLKIT_SOCKET_TIMEOUT` | `REDIS_SOCKET_TIMEOUT` | `15` | seconds, or `none` for no timeout. Must be longer than `block_ms` (see below) |
+| `RILLKIT_BACKEND` | | `redis` | The client library: `redis` (redis-py) or `valkey` (valkey-py) |
+| `RILLKIT_MODE` | | `standalone` | `standalone` or `cluster` |
+| `RILLKIT_CLUSTER_NODES` | | none | Cluster seed nodes, `host:port,host:port` |
+| `RILLKIT_KEY_LAYOUT` | | depends on mode | `plain` or `hashtag`, see [Keys](/guide/keys) |
+
+A URL or separate fields, whichever suits your platform:
+
+::: code-group
+```bash [URL]
+export RILLKIT_URL="rediss://app:secret@cache.internal:6379/0"
+```
+```bash [Separate fields]
+export RILLKIT_HOST=cache.internal
+export RILLKIT_PORT=6379
+export RILLKIT_DB=0
+export RILLKIT_USERNAME=app
+export RILLKIT_PASSWORD=secret
+export RILLKIT_SSL=true
+```
+:::
 
 ```bash
 # Valkey with valkey-py
@@ -34,33 +57,19 @@ export RILLKIT_MODE=cluster
 export RILLKIT_CLUSTER_NODES=10.0.0.1:7000,10.0.0.2:7000,10.0.0.3:7000
 ```
 
-### The `REDIS_*` variables
-
-The variables RillKit 0.1 read still work, so existing deployments need no change. `REDIS_URL` is used when `RILLKIT_URL` is not set. Without either URL, the connection is built from the separate fields:
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `REDIS_URL` | none | Used when `RILLKIT_URL` is not set |
-| `REDIS_HOST` | `localhost` | |
-| `REDIS_PORT` | `6379` | converted to `int` |
-| `REDIS_DB` | `0` | converted to `int` |
-| `REDIS_USERNAME` | none | not read when a URL is set |
-| `REDIS_PASSWORD` | none | not read when a URL is set |
-| `REDIS_SSL` | off | `1`, `true` or `yes` (any case) turn TLS on |
-| `REDIS_SOCKET_TIMEOUT` | `15` | seconds, or `none` for no timeout. Must be longer than `block_ms` (see below) |
-
-The host, port, database, username, password, TLS and timeout settings have no `RILLKIT_` name: set them in `RILLKIT_URL`, or use these variables. They take the prefix you pass, so `Settings.from_env("MYAPP_REDIS_")` reads `MYAPP_REDIS_URL`, `MYAPP_REDIS_HOST` and so on. The `RILLKIT_` variables are always read under that name.
+The 0.1 names take the prefix you pass, so `Settings.from_env("MYAPP_REDIS_")` falls back to `MYAPP_REDIS_URL`, `MYAPP_REDIS_HOST` and so on. The `RILLKIT_` names are always read as they are. An empty variable counts as unset.
 
 ### Precedence
 
 From strongest to weakest:
 
 1. Keyword arguments to `Settings.from_env(...)`, such as `Settings.from_env(backend="valkey")`.
-2. `RILLKIT_URL`.
-3. `<prefix>URL` (`REDIS_URL` by default).
-4. Without a URL: `<prefix>HOST`, `PORT`, `DB`, `USERNAME`, `PASSWORD` and `SSL`.
+2. A URL: `RILLKIT_URL`, else `REDIS_URL` (`<prefix>URL`).
+3. Without a URL, the separate fields: for each one, `RILLKIT_<NAME>`, else `REDIS_<NAME>`.
 
-Without `RILLKIT_BACKEND` the backend is Redis, and without `RILLKIT_MODE` the mode is standalone, so a deployment that only sets `REDIS_URL` behaves exactly as before.
+A URL replaces the host, port, database, username, password and TLS variables, and those are not read when one is set (in either naming). If you set one of their `RILLKIT_` names next to a URL anyway, RillKit logs a warning naming the ignored variables. `RILLKIT_SOCKET_TIMEOUT` applies either way.
+
+Without `RILLKIT_BACKEND` the backend is Redis, and without `RILLKIT_MODE` the mode is standalone, so a deployment that only sets `REDIS_URL` (or `REDIS_HOST` and friends) behaves exactly as before.
 
 ```python [g_config.py]
 import os
@@ -135,7 +144,7 @@ url = f"rediss://{quote(user, safe='')}:{quote(password, safe='')}@redis.example
 Which credentials win when there are two sources:
 
 - **Credentials in the URL win.** `username` and `password` set separately on `Settings` are used only when the URL has none.
-- `Settings.from_env()` does not read `REDIS_USERNAME` or `REDIS_PASSWORD` when a URL is set, the same as RillKit 0.1. Put the credentials in the URL.
+- `Settings.from_env()` does not read `RILLKIT_USERNAME`/`RILLKIT_PASSWORD` (or `REDIS_USERNAME`/`REDIS_PASSWORD`) when a URL is set, the same as RillKit 0.1. Put the credentials in the URL, or use the separate fields without one.
 
 Passwords never appear in the `repr` of a `Settings` (or in its URL), so logging a `Settings` is safe.
 
@@ -202,11 +211,11 @@ Hosted services usually require TLS. Use a `rediss://` URL (note the double s):
 ```bash [RILLKIT_URL]
 export RILLKIT_URL="rediss://default:YOUR_PASSWORD@eu1-example-12345.upstash.io:6379"
 ```
-```bash [REDIS_* (0.1 style)]
-export REDIS_HOST=eu1-example-12345.upstash.io
-export REDIS_PORT=6379
-export REDIS_PASSWORD=YOUR_PASSWORD
-export REDIS_SSL=true
+```bash [Separate fields]
+export RILLKIT_HOST=eu1-example-12345.upstash.io
+export RILLKIT_PORT=6379
+export RILLKIT_PASSWORD=YOUR_PASSWORD
+export RILLKIT_SSL=true
 ```
 ```python [In code]
 broker = Broker("rediss://default:YOUR_PASSWORD@eu1-example-12345.upstash.io:6379")

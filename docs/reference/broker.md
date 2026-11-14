@@ -35,7 +35,7 @@ Attributes: `client` (the client), `keys` (the key builder), `middlewares` (list
 Broker.from_env(prefix: str = "REDIS_", **kwargs) -> Broker
 ```
 
-Builds `Settings.from_env(prefix)` and passes it as `settings=`: `RILLKIT_URL`, `RILLKIT_BACKEND`, `RILLKIT_MODE`, `RILLKIT_CLUSTER_NODES` and `RILLKIT_KEY_LAYOUT`, plus the older `<prefix>URL`, `<prefix>HOST` and friends (see [Settings.from_env](/reference/settings#settings-from-env)). Extra keyword arguments (for example `middlewares=[...]` or `keys=...`) go to the constructor.
+Builds `Settings.from_env(prefix)` and passes it as `settings=`: the `RILLKIT_*` variables (`RILLKIT_URL`, `RILLKIT_HOST`, `RILLKIT_BACKEND`, ...), falling back to the older `<prefix>URL`, `<prefix>HOST` and friends (see [Settings.from_env](/reference/settings#settings-from-env)). Extra keyword arguments (for example `middlewares=[...]` or `keys=...`) go to the constructor.
 
 ## Registering
 

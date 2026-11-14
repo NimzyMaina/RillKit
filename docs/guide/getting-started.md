@@ -52,7 +52,7 @@ export RILLKIT_URL=redis://localhost:6379/0
 python app.py
 ```
 
-`Broker.from_env()` reads `RILLKIT_URL` (and `RILLKIT_BACKEND`, `RILLKIT_MODE` when you need valkey-py or a cluster). Every example in these docs connects this way. Deployments that set `REDIS_URL` keep working; see [Configuration](/guide/configuration#environment-variables).
+`Broker.from_env()` reads `RILLKIT_URL`, or the separate `RILLKIT_HOST`, `RILLKIT_PORT`, `RILLKIT_PASSWORD` and so on (and `RILLKIT_BACKEND`, `RILLKIT_MODE` when you need valkey-py or a cluster). Every example in these docs connects this way. Deployments that set `REDIS_URL` keep working; see [Configuration](/guide/configuration#environment-variables).
 
 You will see something like this (stop it with `Ctrl+C`):
 

@@ -48,28 +48,24 @@ The `repr` hides passwords, the password in `url`, and `client_kwargs` values wh
 Settings.from_env(prefix: str = "REDIS_", **overrides) -> Settings
 ```
 
-Reads these environment variables. Keyword arguments override them.
+Reads these environment variables. Keyword arguments override them. For each connection field a non-empty `RILLKIT_` variable wins over the `<prefix>` one (`REDIS_` by default); an empty one counts as unset.
 
-| Variable | Maps to | Default if unset |
-| --- | --- | --- |
-| `RILLKIT_URL` | `url` (wins over `<prefix>URL`) | `None` |
-| `RILLKIT_BACKEND` | `backend` | `"redis"` |
-| `RILLKIT_MODE` | `mode` | `"standalone"` |
-| `RILLKIT_CLUSTER_NODES` | `cluster_nodes`, comma-separated | `()` |
-| `RILLKIT_KEY_LAYOUT` | `key_layout` | `None` |
+| Variable | Fallback | Maps to | Default if unset |
+| --- | --- | --- | --- |
+| `RILLKIT_URL` | `<prefix>URL` | `url` | `None` |
+| `RILLKIT_HOST` | `<prefix>HOST` | `host` | `"localhost"` |
+| `RILLKIT_PORT` | `<prefix>PORT` | `port` (as `int`) | `6379` |
+| `RILLKIT_DB` | `<prefix>DB` | `db` (as `int`) | `0` |
+| `RILLKIT_USERNAME` | `<prefix>USERNAME` | `username`, only without a URL | `None` |
+| `RILLKIT_PASSWORD` | `<prefix>PASSWORD` | `password`, only without a URL | `None` |
+| `RILLKIT_SSL` | `<prefix>SSL` | `ssl`: true for `1`, `true`, `yes` (any case) | `False` |
+| `RILLKIT_SOCKET_TIMEOUT` | `<prefix>SOCKET_TIMEOUT` | `socket_timeout`: seconds, or `none`/`off`/`0` | `15.0` |
+| `RILLKIT_BACKEND` | | `backend` | `"redis"` |
+| `RILLKIT_MODE` | | `mode` | `"standalone"` |
+| `RILLKIT_CLUSTER_NODES` | | `cluster_nodes`, comma-separated | `()` |
+| `RILLKIT_KEY_LAYOUT` | | `key_layout` | `None` |
 
-The variables RillKit 0.1 read are still supported, with `prefix` (`REDIS_` by default) in front:
-
-| Variable | Maps to | Default if unset |
-| --- | --- | --- |
-| `<prefix>URL` | `url`, when `RILLKIT_URL` is not set | `None` |
-| `<prefix>HOST` | `host` | `"localhost"` |
-| `<prefix>PORT` | `port` (as `int`) | `6379` |
-| `<prefix>DB` | `db` (as `int`) | `0` |
-| `<prefix>USERNAME` | `username`, only without a URL | `None` |
-| `<prefix>PASSWORD` | `password`, only without a URL | `None` |
-| `<prefix>SSL` | `ssl`: true for `1`, `true`, `yes` (any case) | `False` |
-| `<prefix>SOCKET_TIMEOUT` | `socket_timeout`: seconds, or `none`/`off`/`0` | `15.0` |
+When a URL is set, the username and password variables are not read, and host, port, db and ssl are ignored by the client. Setting `RILLKIT_HOST`, `PORT`, `DB`, `USERNAME`, `PASSWORD` or `SSL` next to a URL logs a warning on the `rillkit` logger.
 
 ## `Settings.client`
 
