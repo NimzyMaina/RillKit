@@ -2,7 +2,7 @@
 // build-time data loader and scripts/build-docs.mjs. No Node APIs in here: this
 // file ends up in the client bundle.
 
-export const REPO_URL = 'https://github.com/NimzyMaina/rillkit'
+export const REPO_URL = 'https://github.com/NimzyMaina/RillKit'
 
 /** Name of the runtime manifest written at the site root by scripts/build-docs.mjs. */
 export const MANIFEST_FILE = 'versions.json'
@@ -21,7 +21,7 @@ export function compareTagsDesc(a, b) {
   return 0
 }
 
-/** '/rillkit/v0.1.1/' -> '/rillkit/', '/rillkit/' -> '/rillkit/'. */
+/** '/RillKit/v0.1.1/' -> '/RillKit/', '/RillKit/' -> '/RillKit/'. */
 export function rootBaseOf(base) {
   return base.replace(SNAPSHOT_BASE, '')
 }

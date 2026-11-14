@@ -4,7 +4,7 @@ Simple publish and consume for Redis and Valkey streams, standalone or cluster. 
 retries with backoff, a dead-letter queue, ack policies, middleware and lifecycle hooks, without the
 boilerplate.
 
-**Docs:** https://nimzymaina.github.io/rillkit/
+**Docs:** https://nimzymaina.github.io/RillKit/
 
 ```bash
 pip install rillkit             # plain dict bodies
