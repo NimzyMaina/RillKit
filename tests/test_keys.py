@@ -80,6 +80,18 @@ def test_keys_are_unique_across_tenants_and_names():
         assert len({slot(keys.stream(s)), slot(keys.dlq(s)), slot(keys.idempotency(s, "k"))}) == 1
 
 
+def test_no_stream_tag_can_equal_the_reserved_control_tag():
+    # Control-plane keys will live under {<tenant>:} ({:} without a tenant). A stream tag is
+    # {name} or {tenant:name} with a non-empty, colon-encoded name, so it never ends with ":".
+    import itertools
+
+    parts = ["a", ":", "a:", ":a", "%3A", "{", "}", "%", "t-42"]
+    for tenant, name in itertools.product([None, *parts], parts):
+        tag = HashTagKeys(tenant=tenant).tag(Stream(name))
+        assert not tag.endswith(":}"), (tenant, name, tag)
+        assert tag != "{:}"
+
+
 def test_empty_stream_name_is_refused():
     with pytest.raises(ConfigurationError, match="non-empty stream name"):
         HashTagKeys().stream(Stream(""))

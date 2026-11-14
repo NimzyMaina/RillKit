@@ -6,6 +6,16 @@ and written. Every command rillkit sends goes through the broker's key builder.
 ``PlainKeys`` (the default outside a cluster) keeps the names rillkit has always used, so an
 existing deployment sees the same keys. ``HashTagKeys`` (the default on a cluster) puts a stream,
 its DLQ and its heartbeats in one hash slot so the move to the DLQ can stay a transaction.
+
+Reserved for planned control-plane keys (worker state, directive dedup, node heartbeats, logs and
+producer cordons), so that adding them never moves or collides with existing keys:
+
+- ``PlainKeys``: names under ``rillkit:`` other than ``rillkit:workers:`` and ``rillkit:done:``,
+  namely ``rillkit:state:``, ``rillkit:dedup:``, ``rillkit:nodes:``, ``rillkit:ctl:``,
+  ``rillkit:logs:`` and ``rillkit:cordon:``.
+- ``HashTagKeys``: the control tag ``{<tenant>:}`` (``{:}`` without a tenant) inside each
+  prefix, and the suffixes ``logs`` and ``cordon`` after a stream's tag. No stream can produce
+  the control tag: stream names are non-empty and their colons are percent-encoded.
 """
 
 from typing import Optional
