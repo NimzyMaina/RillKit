@@ -6,7 +6,7 @@ from helpers import BACKEND
 from rillkit import Broker, ConfigurationError, HashTagKeys, PlainKeys, Settings
 
 KEYS = ["URL", "HOST", "PORT", "DB", "USERNAME", "PASSWORD", "SSL", "SOCKET_TIMEOUT"]
-RILLKIT_KEYS = ["URL", "BACKEND", "MODE", "CLUSTER_NODES", "KEY_LAYOUT"]
+RILLKIT_KEYS = ["URL", "BACKEND", "MODE", "CLUSTER_NODES", "KEY_LAYOUT"] + KEYS[1:]
 
 
 @pytest.fixture(autouse=True)
@@ -141,6 +141,66 @@ def test_keyword_arguments_override_the_environment(monkeypatch):
     monkeypatch.setenv("REDIS_HOST", "from-env")
     s = Settings.from_env(backend="redis", host="explicit", client_kwargs={"client_name": "x"})
     assert (s.backend, s.host, s.client_kwargs) == ("redis", "explicit", {"client_name": "x"})
+
+
+def test_rillkit_connection_variables(monkeypatch):
+    for key, value in {"HOST": "rk.internal", "PORT": "6390", "DB": "4", "USERNAME": "app",
+                       "PASSWORD": "pw", "SSL": "yes", "SOCKET_TIMEOUT": "30"}.items():
+        monkeypatch.setenv(f"RILLKIT_{key}", value)
+    s = Settings.from_env()
+    assert (s.url, s.host, s.port, s.db) == (None, "rk.internal", 6390, 4)
+    assert (s.username, s.password, s.ssl, s.socket_timeout) == ("app", "pw", True, 30.0)
+    kwargs = kwargs_of(s)
+    assert (kwargs["host"], kwargs["port"], kwargs["db"]) == ("rk.internal", 6390, 4)
+    assert (kwargs["username"], kwargs["password"]) == ("app", "pw")
+
+
+@pytest.mark.parametrize("key,rillkit,legacy,field,expected", [
+    ("HOST", "new", "old", "host", "new"),
+    ("PORT", "7000", "6000", "port", 7000),
+    ("DB", "2", "1", "db", 2),
+    ("USERNAME", "new", "old", "username", "new"),
+    ("PASSWORD", "new", "old", "password", "new"),
+    ("SSL", "true", "false", "ssl", True),
+    ("SSL", "false", "true", "ssl", False),
+    ("SOCKET_TIMEOUT", "none", "30", "socket_timeout", None),
+])
+def test_rillkit_variable_wins_over_its_redis_name(monkeypatch, key, rillkit, legacy, field,
+                                                    expected):
+    monkeypatch.setenv(f"RILLKIT_{key}", rillkit)
+    monkeypatch.setenv(f"REDIS_{key}", legacy)
+    assert getattr(Settings.from_env(), field) == expected
+    monkeypatch.setenv(f"MYAPP_{key}", legacy)
+    assert getattr(Settings.from_env("MYAPP_"), field) == expected
+
+
+def test_empty_rillkit_variable_falls_back_to_the_redis_name(monkeypatch):
+    monkeypatch.setenv("RILLKIT_HOST", "")
+    monkeypatch.setenv("REDIS_HOST", "legacy")
+    assert Settings.from_env().host == "legacy"
+
+
+def test_redis_variables_still_work_without_rillkit_ones(monkeypatch):
+    monkeypatch.setenv("REDIS_HOST", "legacy")
+    monkeypatch.setenv("REDIS_SOCKET_TIMEOUT", "none")
+    s = Settings.from_env()
+    assert (s.host, s.socket_timeout) == ("legacy", None)
+
+
+def test_rillkit_fields_next_to_a_url_are_ignored_with_a_warning(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setenv("REDIS_URL", "redis://from-url:1234/0")
+    monkeypatch.setenv("RILLKIT_HOST", "ignored")
+    monkeypatch.setenv("RILLKIT_PASSWORD", "ignored-secret")
+    monkeypatch.setenv("RILLKIT_SOCKET_TIMEOUT", "30")  # not replaced by a url, so used
+    with caplog.at_level(logging.WARNING, logger="rillkit"):
+        s = Settings.from_env()
+    assert (s.url, s.password, s.socket_timeout) == ("redis://from-url:1234/0", None, 30.0)
+    assert kwargs_of(s)["host"] == "from-url"
+    [record] = caplog.records
+    assert "RILLKIT_HOST" in record.getMessage() and "RILLKIT_PASSWORD" in record.getMessage()
+    assert "ignored-secret" not in record.getMessage()
 
 
 def test_username_from_env_without_url(monkeypatch):

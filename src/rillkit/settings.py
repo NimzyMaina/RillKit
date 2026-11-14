@@ -1,3 +1,4 @@
+import logging
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields
@@ -8,7 +9,11 @@ from .clients import BACKENDS, MODES, Client, create_client, parse_node
 from .exceptions import ConfigurationError
 from .keys import KEY_LAYOUTS, HashTagKeys, KeyBuilder, PlainKeys, key_builder
 
+log = logging.getLogger("rillkit")
+
 _SECRET_WORDS = ("password", "secret", "token", "credential")
+# Fields a url replaces, so their variables are not used when one is set.
+_URL_REPLACES = ("HOST", "PORT", "DB", "USERNAME", "PASSWORD", "SSL")
 
 
 def _seconds(value: Optional[str], default: Optional[float]) -> Optional[float]:
@@ -44,9 +49,10 @@ def redact_url(url: str) -> str:
 class Settings:
     """Connection settings: which server, which client library, and how to connect.
 
-    ``Settings.from_env()`` reads REDIS_URL, or REDIS_HOST/PORT/DB/USERNAME/PASSWORD/SSL, plus
-    REDIS_SOCKET_TIMEOUT (seconds, or ``none``), and the RILLKIT_URL, RILLKIT_BACKEND,
-    RILLKIT_MODE, RILLKIT_CLUSTER_NODES and RILLKIT_KEY_LAYOUT variables.
+    ``Settings.from_env()`` reads RILLKIT_URL, or RILLKIT_HOST/PORT/DB/USERNAME/PASSWORD/SSL,
+    plus RILLKIT_SOCKET_TIMEOUT (seconds, or ``none``), RILLKIT_BACKEND, RILLKIT_MODE,
+    RILLKIT_CLUSTER_NODES and RILLKIT_KEY_LAYOUT. Each connection variable falls back to its
+    REDIS_ name (REDIS_URL, REDIS_HOST, ...), so 0.1 configurations keep working.
 
     ``socket_timeout`` is set explicitly because consumers block in ``XREADGROUP`` for up to
     ``block_ms`` and the client must wait longer than that. redis-py 8 changed its own default to
@@ -94,21 +100,34 @@ class Settings:
     def from_env(cls, prefix: str = "REDIS_", **overrides: Any) -> "Settings":
         """Settings from environment variables. Keyword arguments override what the env says.
 
-        ``RILLKIT_URL`` wins over ``<prefix>URL``. Without either, the host/port/db/password
-        variables are used. When a url is found, ``<prefix>USERNAME`` and ``<prefix>PASSWORD`` are
-        not read, as before: put credentials in the url.
+        Every connection variable has a ``RILLKIT_`` name and an older ``<prefix>`` name
+        (``REDIS_`` by default); a non-empty ``RILLKIT_`` value wins. A url (``RILLKIT_URL``, else
+        ``<prefix>URL``) wins over the separate host, port, db, username, password and ssl
+        variables, which are then not read; setting one of their ``RILLKIT_`` names alongside a
+        url logs a warning.
         """
         env = os.environ
-        url = env.get("RILLKIT_URL") or env.get(f"{prefix}URL") or None
+
+        def get(name: str, default: Optional[str] = None) -> Optional[str]:
+            value = env.get(f"RILLKIT_{name}")
+            if value:
+                return value
+            return env.get(f"{prefix}{name}", default)
+
+        url = get("URL") or None
+        if url:
+            ignored = [f"RILLKIT_{n}" for n in _URL_REPLACES if env.get(f"RILLKIT_{n}")]
+            if ignored:
+                log.warning("%s ignored: a url is set and provides them", ", ".join(ignored))
         values: dict[str, Any] = {
             "url": url,
-            "host": env.get(f"{prefix}HOST", "localhost"),
-            "port": int(env.get(f"{prefix}PORT", 6379)),
-            "db": int(env.get(f"{prefix}DB", 0)),
-            "password": None if url else env.get(f"{prefix}PASSWORD"),
-            "username": None if url else env.get(f"{prefix}USERNAME"),
-            "ssl": env.get(f"{prefix}SSL", "").lower() in ("1", "true", "yes"),
-            "socket_timeout": _seconds(env.get(f"{prefix}SOCKET_TIMEOUT"), 15.0),
+            "host": get("HOST", "localhost"),
+            "port": int(get("PORT", "6379") or 6379),
+            "db": int(get("DB", "0") or 0),
+            "password": None if url else get("PASSWORD"),
+            "username": None if url else get("USERNAME"),
+            "ssl": (get("SSL", "") or "").lower() in ("1", "true", "yes"),
+            "socket_timeout": _seconds(get("SOCKET_TIMEOUT"), 15.0),
             "backend": env.get("RILLKIT_BACKEND") or "redis",
             "mode": env.get("RILLKIT_MODE") or "standalone",
             "cluster_nodes": _nodes(env.get("RILLKIT_CLUSTER_NODES")),
