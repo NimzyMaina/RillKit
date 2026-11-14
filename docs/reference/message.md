@@ -14,9 +14,9 @@ A handler receives a `Message` when a parameter is annotated `Message`, or is na
 | --- | --- | --- |
 | `id` | `str` | The entry id, for example `1793094479536-0`. |
 | `stream` | `Stream` | The stream (with its group and codec) this message came from. |
-| `key` | `str` | The physical key of that stream. Equals `stream.name` unless the broker uses [hash-tagged keys](/guide/cluster#key-layout). |
+| `key` | `str` | The physical key of that stream. Equals `stream.name` unless the broker uses [hash-tagged keys](/guide/keys). |
 | `raw` | `dict[str, str]` | All fields of the entry as text, including `data`. |
-| `deliveries` | `int` | How many times Redis has delivered this entry to the group, counting the current one. `1` on the first delivery. |
+| `deliveries` | `int` | How many times the server has delivered this entry to the group, counting the current one. `1` on the first delivery. |
 | `consumer` | `str` | Name of the consumer that holds the message. |
 | `acked` | `bool` | `True` once the message has been acknowledged (or dead-lettered). |
 | `nacked` | `bool` | `True` after `nack()` until it is acked. |

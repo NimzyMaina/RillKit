@@ -64,6 +64,7 @@ export default defineConfig({
           items: [
             { text: 'Lifecycle', link: '/guide/lifecycle' },
             { text: 'Configuration', link: '/guide/configuration' },
+            { text: 'Keys', link: '/guide/keys' },
             { text: 'Redis and Valkey Cluster', link: '/guide/cluster' },
             { text: 'Operations', link: '/guide/operations' },
             { text: 'Testing', link: '/guide/testing' },

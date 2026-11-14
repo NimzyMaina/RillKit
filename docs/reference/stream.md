@@ -20,7 +20,7 @@ A stream name plus everything both sides should agree on. It is immutable. Anywh
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `name` | required | The Redis key of the stream. |
+| `name` | required | The stream name. With the default plain keys it is also the key; the broker's [key builder](/guide/keys) decides the physical key. |
 | `group` | `None` | Consumer group. Needed only by consumers. |
 | `dlq` | `None` | Dead letter stream name. When `None` it is `<name>-dlq`. |
 | `maxlen` | `None` | Approximate length cap applied when publishing with this `Stream`. A per-call `maxlen` overrides it. |
@@ -32,7 +32,7 @@ A stream name plus everything both sides should agree on. It is immutable. Anywh
 Stream.dlq_name -> str
 ```
 
-Property: `dlq` if set, otherwise `f"{name}-dlq"`.
+Property: `dlq` if set, otherwise `f"{name}-dlq"`. This is the logical DLQ name, and the key with the default plain keys. For the physical key under any layout use `broker.keys.dlq(stream)` (with hash-tagged keys it is `rk:{<name>}:dlq`).
 
 ## Codec
 
@@ -74,7 +74,7 @@ class CompactJson:
 
 
 EVENTS = Stream("events", group="readers", dlq="events-failed", maxlen=1000, codec=CompactJson())
-broker = Broker("redis://localhost:6379/0")
+broker = Broker.from_env()
 
 
 @broker.subscribe(EVENTS, consumer="r1", block_ms=200)
