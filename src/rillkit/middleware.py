@@ -47,23 +47,30 @@ class BaseMiddleware:
 class Idempotent(BaseMiddleware):
     """Skip messages whose key was already processed successfully.
 
-    Redis delivers at least once, so a crash after the handler finished but before the ack means a
-    redelivery. The key is stored with ``ttl`` seconds once the handler returns without raising.
+    Streams deliver at least once, so a crash after the handler finished but before the ack means
+    a redelivery. The key is stored with ``ttl`` seconds once the handler returns without raising.
 
         broker = Broker(middlewares=[Idempotent(key=lambda m: m.body["request_id"])])
+
+    By default the marker's key comes from the broker's key builder (``broker.keys.idempotency``):
+    ``rillkit:done:<stream>:<key>`` with plain keys, ``rk:{<stream>}:done:<key>`` with hash-tagged
+    keys, so markers follow the stream's prefix and tenant. Pass ``prefix`` to use
+    ``<prefix><stream>:<key>`` instead.
     """
 
     def __init__(
         self,
         key: Callable[[Message], str],
         ttl: int = 7 * 24 * 3600,
-        prefix: str = "rillkit:done:",
+        prefix: Optional[str] = None,
     ):
         self.key = key
         self.ttl = ttl
         self.prefix = prefix
 
     def _redis_key(self, msg: Message) -> str:
+        if self.prefix is None:
+            return self.broker.keys.idempotency(msg.stream, self.key(msg))
         return f"{self.prefix}{msg.stream.name}:{self.key(msg)}"
 
     def consume_scope(self, call_next: Callable[[Message], Any], msg: Message) -> Any:
