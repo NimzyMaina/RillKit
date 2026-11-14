@@ -212,6 +212,24 @@ def test_repr_never_shows_passwords():
     assert "user:***@example.com:6380" in text and "visible" in text
 
 
+@pytest.mark.parametrize("url,shown", [
+    ("redis://h:6379/0", "redis://h:6379/0"),
+    ("redis://:pw@h:6379/0", "redis://:***@h:6379/0"),
+    ("redis://tok@h/0", "redis://***@h/0"),
+    ("redis://h/0?password=pw&socket_timeout=3", "redis://h/0?password=***&socket_timeout=3"),
+    ("rediss://u:pw@[::1]:6380/0", "rediss://u:***@[::1]:6380/0"),
+])
+def test_redact_url(url, shown):
+    from rillkit.settings import redact_url
+
+    assert redact_url(url) == shown
+
+
+def test_query_string_credentials_count_as_url_credentials():
+    kwargs = kwargs_of(Settings(url="redis://h/0?password=from-query", password="field"))
+    assert kwargs["password"] == "from-query"
+
+
 # client_kwargs
 
 

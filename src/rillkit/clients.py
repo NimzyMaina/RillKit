@@ -10,7 +10,7 @@ import inspect
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qsl, unquote, urlparse
 
 import redis
 from redis.crc import key_slot
@@ -127,8 +127,10 @@ CLUSTER_REDIRECT_ERRORS = _exception_classes(
 
 
 def _url_credentials(url: str) -> bool:
+    """Whether the url carries a username or password, in the userinfo or the query string."""
     parsed = urlparse(url)
-    return bool(parsed.username or parsed.password)
+    query = {k.lower() for k, _ in parse_qsl(parsed.query, True)}
+    return bool(parsed.username or parsed.password or query & {"username", "password"})
 
 
 def _url_db(url: str) -> int:

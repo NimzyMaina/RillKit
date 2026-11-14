@@ -2,7 +2,7 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any, Optional, Union
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from .clients import BACKENDS, MODES, Client, create_client, parse_node
 from .exceptions import ConfigurationError
@@ -21,17 +21,23 @@ def _nodes(value: Optional[str]) -> tuple[str, ...]:
     return tuple(n.strip() for n in (value or "").split(",") if n.strip())
 
 
+def _is_secret(name: str) -> bool:
+    return any(w in name.lower() for w in _SECRET_WORDS)
+
+
 def redact_url(url: str) -> str:
-    """``url`` with any password replaced by ``***``."""
+    """``url`` with the password, a lone username and secret query values replaced by ``***``."""
     parsed = urlparse(url)
-    if parsed.password is None:
-        return url
-    user = parsed.username or ""
-    host = parsed.hostname or ""
-    if ":" in host:
-        host = f"[{host}]"
-    port = f":{parsed.port}" if parsed.port else ""
-    return urlunparse(parsed._replace(netloc=f"{user}:***@{host}{port}"))
+    netloc = parsed.netloc
+    if "@" in netloc:
+        host = netloc.rpartition("@")[2]
+        user = parsed.username or ""
+        netloc = f"{user}:***@{host}" if parsed.password is not None else f"***@{host}"
+    query = urlencode(
+        [(k, "***" if _is_secret(k) else v) for k, v in parse_qsl(parsed.query, True)],
+        safe="*",
+    )
+    return urlunparse(parsed._replace(netloc=netloc, query=query))
 
 
 @dataclass
@@ -131,9 +137,6 @@ class Settings:
             elif f.name == "url" and value:
                 value = redact_url(value)
             elif f.name == "client_kwargs":
-                value = {
-                    k: "***" if any(w in k.lower() for w in _SECRET_WORDS) else v
-                    for k, v in value.items()
-                }
+                value = {k: "***" if _is_secret(k) else v for k, v in value.items()}
             parts.append(f"{f.name}={value!r}")
         return f"Settings({', '.join(parts)})"
