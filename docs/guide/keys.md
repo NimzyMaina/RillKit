@@ -158,7 +158,15 @@ Inside the tag, `%`, `{`, `}` and `:` are percent-encoded in the stream name and
 | `PlainKeys` | stream name | stream name or your `dlq=` | stream + **group + worker** |
 | `HashTagKeys` | prefix, (tenant), stream | prefix, (tenant), stream, (your `dlq=`) | prefix, (tenant), stream + **group + worker** |
 
-- **Only heartbeats contain the group and worker name.** There is one per running worker, removed on a clean stop.
+Alongside the heartbeats, each stream and group has a **consumer registry**: a sorted set of the workers that are alive, each scored by when its heartbeat expires. `active_workers` reads it, so it never has to scan for keys.
+
+| Layout | Consumer registry for group `billing` |
+| --- | --- |
+| `PlainKeys` | `rillkit:consumers:orders:billing` (a `:` or `%` in the stream name is encoded) |
+| `HashTagKeys` | `rk:{orders}:consumers:billing`, in the stream's slot |
+| `HashTagKeys(prefix="shop", tenant="t-42")` | `shop:{t-42:orders}:consumers:billing` |
+
+- **Only heartbeats contain the group and worker name.** There is one per running worker, removed on a clean stop. The registry holds the worker names as members, under a key with the group name.
 - The stream and DLQ are shared by every group and worker. A consumer group and its pending messages are stored *inside* the stream, not as keys of their own.
 
 ## `Idempotent` markers
@@ -247,19 +255,25 @@ When one Redis or Valkey server holds data for several tenants:
 - **One broker per tenant**, each with `HashTagKeys(prefix=..., tenant=...)`. The tenant id is part of every stream, DLQ, heartbeat and `Idempotent` key, so the same stream name and the same idempotency key never mix between tenants.
 - **Opaque tenant ids** such as `t-42`, not customer names: they end up in key names, logs and monitoring.
 - **Take the tenant id from trusted server-side context** (who is authenticated), never from a message body or a client-supplied value.
-- **Isolate with ACL users**, not with key names. One pattern per tenant covers all of that tenant's keys and channels and nothing of other tenants:
+- **Isolate with ACL users**, not with key names. Give each tenant a user that may only touch its own keys and channels, and only run the commands RillKit needs:
 
   ```text
-  ACL SETUSER tenant-t-42 on >SECRET ~shop:{t-42:* &shop:{t-42:* +@all -@dangerous
+  ACL SETUSER tenant-t-42 on >SECRET resetkeys resetchannels ~shop:{t-42:* &shop:{t-42:* -@all +@connection +@stream +@string +@hash +@sortedset +@transaction +del +exists +ssubscribe +sunsubscribe +spublish +subscribe +unsubscribe +publish +cluster|slots +cluster|shards +cluster|nodes +readonly +readwrite
   ```
 
-  The pattern ends right after the tenant's `:`, so it does not match tenant `t-42x`, and it does not match keys built without a tenant.
+  The key pattern ends right after the tenant's `:`, so it does not match tenant `t-42x`, and it does not match keys built without a tenant. On a cluster, create the user on every node, replicas included: ACL users are per server.
+
+  ::: warning Use an allowlist, not `+@all -@dangerous`
+  Key patterns stop a user from reading or writing other keys, but **not from listing their names**: `SCAN` returns every key name in the database, and it is not in `@dangerous`. With `+@all -@dangerous`, tenant `t-42` can list `shop:{t-43:payroll}:stream` and learn another tenant's id and stream names. The allowlist above leaves out `SCAN`, `KEYS`, `RANDOMKEY`, `PUBSUB`, `CLIENT`, `INFO`, `CONFIG` and every admin command. RillKit never needs them: `active_workers` reads the [consumer registry](#where-the-group-and-worker-name-appear) instead of scanning.
+
+  RillKit's test suite runs a whole worker (publishing, consuming, retries, the DLQ, replay, `Idempotent`, heartbeats and `active_workers`) as a user with exactly this rule, on a single server and on a cluster.
+  :::
 - **One client per broker.** Each broker has its own connection pool and consumer threads, and `broker.stop()` closes its client, so do not share one client between tenant brokers.
 - **Busy tenants:** each (tenant, stream) pair lives in one cluster slot. Spread a heavy tenant over several streams rather than expecting one stream to use several nodes.
 
 ## Finding the real keys
 
-- `broker.keys.stream(s)`, `broker.keys.dlq(s)`, `broker.keys.heartbeat(s, group, consumer)` and `broker.keys.idempotency(s, key)` return them.
+- `broker.keys.stream(s)`, `broker.keys.dlq(s)`, `broker.keys.heartbeat(s, group, consumer)`, `broker.keys.consumers(s, group)` and `broker.keys.idempotency(s, key)` return them.
 - `msg.key` is the physical key of the stream a message came from (`msg.stream.name` and the DLQ's `x-stream` field stay the logical name).
 - The DLQ log line names the physical key: `moving message ... to rk:{orders}:dlq: ...`.
 - In `redis-cli` or `valkey-cli`, quote keys with braces: `XLEN 'rk:{orders}:stream'`, and add `-c` on a cluster.
@@ -274,7 +288,7 @@ Subclass [`KeyBuilder`](/reference/keys) and implement `stream`, `dlq` and `hear
 
 Some names are kept free for upcoming RillKit features, so adding those never moves or collides with your keys:
 
-- With `PlainKeys`: anything under `rillkit:` besides `rillkit:workers:` and `rillkit:done:`. Do not name streams `rillkit:...`.
+- With `PlainKeys`: anything under `rillkit:` besides `rillkit:workers:`, `rillkit:consumers:` and `rillkit:done:`. Do not name streams `rillkit:...`.
 - With `HashTagKeys`: the tag `{<tenant>:}` (`{:}` without a tenant) inside each prefix, and the suffixes `logs` and `cordon` after a stream's tag. No stream can produce that tag, since stream names are non-empty and their colons are encoded.
 
 ::: warning Changing the layout moves your data

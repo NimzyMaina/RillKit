@@ -2,14 +2,14 @@
 
 ## Heartbeat and active_workers
 
-Every consumer writes a heartbeat key, `rillkit:workers:<stream>:<group>:<consumer>` (or `rk:{<stream>}:workers:<group>:<consumer>` with [hash-tagged keys](/guide/keys); `broker.keys.heartbeat(...)` gives the exact name), with a time-to-live of `heartbeat_ttl` seconds (default 60). It is refreshed at the top of every loop and after every message, and deleted on a clean shutdown. A worker that crashes simply stops refreshing it and drops off after the TTL.
+Every consumer writes a heartbeat key, `rillkit:workers:<stream>:<group>:<consumer>` (or `rk:{<stream>}:workers:<group>:<consumer>` with [hash-tagged keys](/guide/keys); `broker.keys.heartbeat(...)` gives the exact name), with a time-to-live of `heartbeat_ttl` seconds (default 60). It is refreshed at the top of every loop and after every message, and deleted on a clean shutdown. A worker that crashes simply stops refreshing it and drops off after the TTL. Each refresh also records the worker in the stream and group's [consumer registry](/guide/keys#where-the-group-and-worker-name-appear) (`rillkit:consumers:<stream>:<group>`), a sorted set scored by when the heartbeat expires.
 
 ```python
 broker.active_workers("orders", group="billing")   # ['billing-web1-4242', 'billing-web2-977']
 broker.active_workers(Stream("orders", group="billing"))
 ```
 
-`active_workers` returns the sorted consumer names whose heartbeat is alive. On a cluster it scans every primary. `XINFO CONSUMERS` only lists consumers that have already received a message, so it misses idle workers. The heartbeat does not.
+`active_workers` returns the sorted consumer names whose heartbeat is alive, read from the registry in one command, with no `SCAN`, so it also works for ACL users that may not list keys. Workers on RillKit 0.2 or older write no registry entry and are not listed; upgrade every worker of a group together. `XINFO CONSUMERS` only lists consumers that have already received a message, so it misses idle workers. The heartbeat does not.
 
 ```python [g_ops.py]
 import time
