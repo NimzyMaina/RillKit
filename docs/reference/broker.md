@@ -4,7 +4,7 @@
 from rillkit import Broker, Publisher
 ```
 
-`Broker` owns the Redis client, the subscribers and the lifecycle hooks.
+`Broker` owns the client (Redis or Valkey, standalone or cluster), the subscribers and the lifecycle hooks.
 
 ## Constructor
 
@@ -12,20 +12,22 @@ from rillkit import Broker, Publisher
 Broker(
     url: Optional[str] = None,
     *,
-    client: Optional[redis.Redis] = None,
+    client: Optional[Client] = None,
     settings: Optional[Settings] = None,
     middlewares: Sequence[BaseMiddleware] = (),
+    keys: Optional[KeyBuilder] = None,
 )
 ```
 
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `url` | `None` | Redis URL, used if neither `client` nor `settings` is given. With none of the three, it connects to `localhost:6379`, db 0. |
-| `client` | `None` | An existing `redis.Redis`. Takes priority over `settings` and `url`. |
+| `client` | `None` | An existing `redis.Redis`, `redis.RedisCluster`, `valkey.Valkey` or `valkey.ValkeyCluster`, used as is. Takes priority over `settings` and `url`. `stop()` closes it. |
 | `settings` | `None` | A [`Settings`](/reference/settings) object. Takes priority over `url`. |
 | `middlewares` | `()` | Broker-wide [middleware](/reference/middleware), added in order with `use()`. |
+| `keys` | `None` | The [key builder](/reference/keys). Default: from `settings.key_layout` if set, else `PlainKeys` for a standalone client and `HashTagKeys` for a cluster client. |
 
-Attributes: `client` (the Redis client), `middlewares` (list), `subscribers` (list of registered subscribers).
+Attributes: `client` (the client), `keys` (the key builder), `middlewares` (list), `subscribers` (list of registered subscribers).
 
 ### `Broker.from_env`
 
@@ -127,8 +129,8 @@ Each takes a function with no arguments, registers it and returns it, so it work
 
 | Method | Description |
 | --- | --- |
-| `active_workers(stream, group: Optional[str] = None) -> list[str]` | Sorted consumer names that have a live heartbeat for the stream and group. `group` defaults to the `Stream`'s group. |
-| `replay_dlq(stream, count: int = 100) -> int` | Moves up to `count` entries from the stream's DLQ back onto the stream, without the `x-` fields, deleting them from the DLQ. Returns how many were moved. Pass the **original** stream. |
+| `active_workers(stream, group: Optional[str] = None) -> list[str]` | Sorted consumer names that have a live heartbeat for the stream and group. `group` defaults to the `Stream`'s group. On a cluster every primary is scanned; an unreachable node raises instead of returning a partial list. |
+| `replay_dlq(stream, count: int = 100) -> int` | Moves up to `count` entries from the stream's DLQ back onto the stream, without the `x-` fields, deleting them from the DLQ. Returns how many were moved. Pass the **original** stream. Each move is a transaction when the stream and DLQ share a slot; otherwise it adds before it deletes (see [DLQ atomicity](/guide/cluster#dlq-atomicity)). |
 
 ## Publisher
 

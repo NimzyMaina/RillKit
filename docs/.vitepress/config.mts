@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'RillKit',
-  description: 'Publish and consume Redis Streams in Python, with consumer groups, retries and a dead-letter queue',
+  description: 'Publish and consume Redis and Valkey streams in Python, with consumer groups, retries and a dead-letter queue',
   base: '/rillkit/',
   cleanUrls: true,
   lastUpdated: true,
@@ -64,8 +64,10 @@ export default defineConfig({
           items: [
             { text: 'Lifecycle', link: '/guide/lifecycle' },
             { text: 'Configuration', link: '/guide/configuration' },
+            { text: 'Redis and Valkey Cluster', link: '/guide/cluster' },
             { text: 'Operations', link: '/guide/operations' },
             { text: 'Testing', link: '/guide/testing' },
+            { text: 'Upgrading', link: '/guide/upgrading' },
           ],
         },
       ],
@@ -98,6 +100,7 @@ export default defineConfig({
             { text: 'AckPolicy', link: '/reference/ack-policy' },
             { text: 'Middleware', link: '/reference/middleware' },
             { text: 'Settings', link: '/reference/settings' },
+            { text: 'Key builders', link: '/reference/keys' },
             { text: 'Exceptions', link: '/reference/exceptions' },
           ],
         },

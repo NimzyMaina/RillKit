@@ -1,13 +1,15 @@
 # RillKit
 
-Simple publish and consume for Redis Streams. Consumer groups, retries with backoff, a dead-letter
-queue, ack policies, middleware and lifecycle hooks, without the boilerplate.
+Simple publish and consume for Redis and Valkey streams, standalone or cluster. Consumer groups,
+retries with backoff, a dead-letter queue, ack policies, middleware and lifecycle hooks, without the
+boilerplate.
 
 **Docs:** https://nimzymaina.github.io/rillkit/
 
 ```bash
 pip install rillkit             # plain dict bodies
 pip install "rillkit[pydantic]" # optional typed bodies
+pip install "rillkit[valkey]"   # optional valkey-py client
 ```
 
 ```python
@@ -40,13 +42,22 @@ if __name__ == "__main__":
 - Worker heartbeats: `broker.active_workers(stream)` includes idle workers
 - Stack `@broker.publisher(...)` under `@broker.subscribe(...)` to publish a handler's return value
 - The wire format is a single `data` field holding JSON, so plain redis-py producers interoperate
+- Redis or Valkey (`RILLKIT_BACKEND=valkey`), standalone or Cluster (`RILLKIT_MODE=cluster`), with
+  the stream and its DLQ in one hash slot so the move to the DLQ stays a transaction
 
 ## Development
 
 ```bash
 uv sync --group dev
-REDIS_URL=redis://localhost:6379/15 uv run pytest   # needs a Redis
+REDIS_URL=redis://localhost:6379/15 uv run pytest   # needs a Redis; only db 15 is flushed
+RILLKIT_TEST_BACKEND=valkey REDIS_URL=redis://localhost:6380/15 uv run pytest   # valkey-py
+
+scripts/test-cluster.sh valkey 7101                 # a six-node cluster in Docker
+RILLKIT_TEST_BACKEND=valkey RILLKIT_TEST_MODE=cluster \
+  RILLKIT_TEST_CLUSTER_NODES=127.0.0.1:7101 uv run pytest
+
 npm install && npm run docs:dev                     # docs
+npm run docs:build:versions                         # latest plus a snapshot per release tag
 ```
 
 MIT licensed.
