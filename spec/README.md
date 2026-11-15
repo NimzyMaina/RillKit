@@ -46,7 +46,7 @@ Rules the vectors pin down that are easy to get wrong in a new language:
   can split an emoji; use `Array.from(error).slice(0, 1000).join("")`.
 - Retry waits are floating point (`backoff` may be 1.5); compare with a small tolerance.
 
-A runner is a few lines in each language. The Python one is `tests/test_conformance.py`.
+A runner is a few lines in each language. The Python one is `sdks/python/tests/test_conformance.py`.
 
 ## Changing the spec
 

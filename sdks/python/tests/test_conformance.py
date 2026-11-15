@@ -23,7 +23,18 @@ from rillkit.consumer import (
 from rillkit.controlplane import DirectiveError, plan_directive, resolve_desired
 from rillkit.tracing import parse_traceparent
 
-SPEC = Path(__file__).resolve().parents[1] / "spec"
+
+def _find_spec() -> Path:
+    """spec/ at the repository root (sdks/python/tests -> ../../../spec), or next to tests/
+    in an sdist, which ships a copy."""
+    here = Path(__file__).resolve()
+    for candidate in (here.parents[3] / "spec", here.parents[1] / "spec"):
+        if (candidate / "conformance").is_dir():
+            return candidate
+    raise FileNotFoundError("cannot find the spec/ directory with the conformance vectors")
+
+
+SPEC = _find_spec()
 VECTORS = SPEC / "conformance"
 PROTOCOL = SPEC / "protocol" / "v1"
 RUNNERS = {"keys.json", "desired_state.json", "directives.json", "traceparent.json",

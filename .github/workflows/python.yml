@@ -1,9 +1,25 @@
-name: CI
+name: Python SDK
 
+# The Python SDK in sdks/python, plus the shared spec it is tested against (its conformance
+# vectors and protocol schemas). Other SDKs get workflows of their own.
 on:
   push:
     branches: [main]
+    paths:
+      - "sdks/python/**"
+      - "spec/**"
+      - "scripts/test-cluster.sh"
+      - ".github/workflows/python.yml"
   pull_request:
+    paths:
+      - "sdks/python/**"
+      - "spec/**"
+      - "scripts/test-cluster.sh"
+      - ".github/workflows/python.yml"
+
+defaults:
+  run:
+    working-directory: sdks/python
 
 jobs:
   lint:
@@ -12,6 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
+          working-directory: sdks/python
           python-version: "3.9"
       - run: uv sync --group dev
       - run: uv run ruff check src tests
@@ -47,6 +64,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
+          working-directory: sdks/python
           python-version: ${{ matrix.python-version }}
       - run: uv sync --group dev
       - run: uv run pytest -q
@@ -68,12 +86,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
+          working-directory: sdks/python
           python-version: "3.12"
-      - run: scripts/test-cluster.sh ${{ matrix.backend }} 7101
+      - run: ../../scripts/test-cluster.sh ${{ matrix.backend }} 7101
       - run: uv sync --group dev
       - run: uv run pytest -q
       - if: always()
-        run: scripts/test-cluster.sh stop ${{ matrix.backend }}
+        run: ../../scripts/test-cluster.sh stop ${{ matrix.backend }}
 
   newest-clients:
     # Client libraries change defaults between major versions (redis-py 8 set socket_timeout to
@@ -94,6 +113,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
+          working-directory: sdks/python
           python-version: "3.13"
       - run: uv sync --group dev
       - run: uv pip install --upgrade redis valkey
@@ -111,6 +131,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          working-directory: sdks/python
       - run: uv build
       - run: uvx twine check dist/*
       - name: The valkey extra installs and Redis stays the only hard dependency
