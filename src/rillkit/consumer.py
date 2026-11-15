@@ -40,6 +40,52 @@ def _fields(raw: dict[Any, Any]) -> dict[str, str]:
     return {_text(k): _text(v) for k, v in raw.items()}
 
 
+# The data-plane rules, as pure functions so the conformance vectors can test them
+# (spec/conformance/data_plane.json). Every SDK must compute the same values.
+
+DLQ_ERROR_LIMIT = 1000
+
+
+def lane_consumer_name(consumer: str, index: int) -> str:
+    """The consumer name of lane ``index``: ``consumer`` itself, then ``<consumer>-1``, ..."""
+    return consumer if index == 0 else f"{consumer}-{index}"
+
+
+def retry_wait_ms(
+    claim_idle_ms: int, backoff: float, max_backoff_ms: int, times_delivered: int
+) -> float:
+    """How long a pending message must be idle before it is claimed and retried:
+    ``claim_idle_ms * backoff ** (times_delivered - 1)``, capped at ``max_backoff_ms``."""
+    wait = claim_idle_ms * (backoff ** max(times_delivered - 1, 0))
+    return min(wait, max_backoff_ms)
+
+
+def retries_exhausted(max_retries: Optional[int], deliveries: int) -> bool:
+    """Whether a message delivered ``deliveries`` times has no retries left (None: unlimited)."""
+    return max_retries is not None and deliveries > max_retries
+
+
+def dead_letter_entry(
+    fields: dict[str, str], msg_id: str, stream: str, group: str, error: str, deliveries: int
+) -> dict[str, str]:
+    """The DLQ entry for a message: its own fields plus the ``x-`` context fields. A field of
+    the same name in the original entry is overwritten."""
+    entry = dict(fields)
+    entry.update({
+        "x-original-id": msg_id,
+        "x-stream": stream,
+        "x-group": group,
+        "x-error": error[:DLQ_ERROR_LIMIT],
+        "x-deliveries": str(deliveries),
+    })
+    return entry
+
+
+def replay_entry(fields: dict[str, str]) -> dict[str, str]:
+    """The entry a DLQ entry is replayed as: every field except the ``x-`` ones."""
+    return {k: v for k, v in fields.items() if not k.startswith("x-")}
+
+
 def _is_model(annotation: Any) -> bool:
     return inspect.isclass(annotation) and hasattr(annotation, "model_validate")
 
@@ -157,7 +203,7 @@ class Subscriber:
 
     def lane_consumer(self, index: int) -> str:
         """The consumer name of lane ``index``: ``consumer``, then ``<consumer>-1``, ..."""
-        return self.consumer if index == 0 else f"{self.consumer}-{index}"
+        return lane_consumer_name(self.consumer, index)
 
     @property
     def _thread(self) -> Optional[threading.Thread]:
@@ -360,11 +406,11 @@ class Subscriber:
         ]
 
     def _required_idle_ms(self, times_delivered: int) -> float:
-        wait = self.claim_idle_ms * (self.backoff ** max(times_delivered - 1, 0))
-        return min(wait, self.max_backoff_ms)
+        return retry_wait_ms(self.claim_idle_ms, self.backoff, self.max_backoff_ms,
+                             times_delivered)
 
     def _exhausted(self, deliveries: int) -> bool:
-        return self.max_retries is not None and deliveries > self.max_retries
+        return retries_exhausted(self.max_retries, deliveries)
 
     def _claim(self, consumer: Optional[str] = None, count: Optional[int] = None) -> list[Message]:
         """Take over pending messages idle long enough, honouring the retry backoff."""
@@ -494,14 +540,9 @@ class Subscriber:
         is retried and can reach the DLQ twice, but it is never lost.
         """
         log.warning("moving message %s to %s: %s", msg.id, self.dlq_key, error)
-        entry: dict[Any, Any] = dict(msg.raw)
-        entry.update({
-            "x-original-id": msg.id,
-            "x-stream": self.stream.name,
-            "x-group": self.group,
-            "x-error": error[:1000],
-            "x-deliveries": str(msg.deliveries),
-        })
+        entry: dict[Any, Any] = dead_letter_entry(
+            msg.raw, msg.id, self.stream.name, self.group, error, msg.deliveries
+        )
         run_together(self.client, [
             ("xadd", (self.dlq_key, entry)),
             ("xack", (self.stream_key, self.group, msg.id)),

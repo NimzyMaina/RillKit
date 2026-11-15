@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 from .ack import AckPolicy
 from .clients import CLIENT_ERRORS, Client, is_cluster, run_together
 from .config import Control
-from .consumer import Subscriber, _text
+from .consumer import Subscriber, _text, replay_entry
 from .exceptions import ConfigurationError, PublishError
 from .keys import HashTagKeys, KeyBuilder, PlainKeys
 from .middleware import BaseMiddleware, PublishCommand
@@ -336,9 +336,7 @@ class Broker:
         moved = 0
         rows: Any = self.client.xrange(dlq_key, count=count)
         for entry_id, raw in rows:
-            fields: dict[Any, Any] = {
-                _text(k): _text(v) for k, v in raw.items() if not _text(k).startswith("x-")
-            }
+            fields: dict[Any, Any] = replay_entry({_text(k): _text(v) for k, v in raw.items()})
             run_together(
                 self.client, [("xadd", (stream_key, fields)), ("xdel", (dlq_key, entry_id))]
             )

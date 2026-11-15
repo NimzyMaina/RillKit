@@ -13,16 +13,25 @@ import pytest
 from redis.crc import key_slot
 
 from rillkit import ConfigurationError, Control, HashTagKeys, KeyBuilder, PlainKeys, Stream
+from rillkit.consumer import (
+    dead_letter_entry,
+    lane_consumer_name,
+    replay_entry,
+    retries_exhausted,
+    retry_wait_ms,
+)
 from rillkit.controlplane import DirectiveError, plan_directive, resolve_desired
 from rillkit.tracing import parse_traceparent
 
 SPEC = Path(__file__).resolve().parents[1] / "spec"
 VECTORS = SPEC / "conformance"
 PROTOCOL = SPEC / "protocol" / "v1"
-RUNNERS = {"keys.json", "desired_state.json", "directives.json", "traceparent.json"}
+RUNNERS = {"keys.json", "desired_state.json", "directives.json", "traceparent.json",
+           "data_plane.json"}
 
 
 def cases(name: str) -> list[dict[str, Any]]:
+    """The ``cases`` of a vector file (data_plane.json groups its cases by rule instead)."""
     return json.loads((VECTORS / name).read_text())["cases"]  # type: ignore[no-any-return]
 
 
@@ -107,6 +116,40 @@ def test_traceparent(case):
     got = None if span is None else {"trace_id": span.trace_id, "span_id": span.span_id,
                                      "flags": span.flags}
     assert got == case["expect"]
+
+
+# data plane (spec/data-plane.md)
+
+DATA_PLANE = json.loads((VECTORS / "data_plane.json").read_text())
+
+
+@pytest.mark.parametrize("case", DATA_PLANE["retry_wait"], ids=str)
+def test_retry_wait(case):
+    got = retry_wait_ms(case["claim_idle_ms"], case["backoff"], case["max_backoff_ms"],
+                        case["times_delivered"])
+    assert got == pytest.approx(case["expect_ms"])
+
+
+@pytest.mark.parametrize("case", DATA_PLANE["retries_exhausted"], ids=str)
+def test_retries_exhausted(case):
+    assert retries_exhausted(case["max_retries"], case["deliveries"]) is case["expect"]
+
+
+@pytest.mark.parametrize("case", DATA_PLANE["dead_letter"], ids=case_id)
+def test_dead_letter_entry(case):
+    got = dead_letter_entry(case["fields"], case["msg_id"], case["stream"], case["group"],
+                            case["error"], case["deliveries"])
+    assert got == case["expect"]
+
+
+@pytest.mark.parametrize("case", DATA_PLANE["replay"], ids=str)
+def test_replay_entry(case):
+    assert replay_entry(case["fields"]) == case["expect"]
+
+
+@pytest.mark.parametrize("case", DATA_PLANE["lane_consumer"], ids=str)
+def test_lane_consumer_name(case):
+    assert lane_consumer_name(case["consumer"], case["index"]) == case["expect"]
 
 
 # protocol schemas (spec 5)

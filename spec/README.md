@@ -10,14 +10,16 @@ consumer groups and a control plane.
 | `protocol/v1/examples/` | One valid example of each message | Smoke tests for the schemas and for generated types |
 | `conformance/*.json` | Test vectors: inputs and the exact expected output | Every SDK's test suite loads them and must pass all of them |
 
-The prose rules (behaviour, atomicity, failure handling) are in
-`plans/rillkit_architecture_control_plane_spec.md` for now. They move here as `keyspace.md`,
-`data-plane.md` and `control-plane.md`. The data plane (entry fields, DLQ fields, retry timing,
-heartbeats) is not written down yet and is the next step.
+The prose rules (behaviour, atomicity, failure handling):
+
+- [`data-plane.md`](data-plane.md): entries, publishing, consumer groups, retries, ack policies,
+  the DLQ and replay, heartbeats, idempotency markers and trace context.
+- The keyspace and the control plane are specified in the control-plane specification, which
+  is not in this repository yet. They will move here as `keyspace.md` and `control-plane.md`.
 
 ## Conformance vectors
 
-Each file is `{"description": ..., "cases": [...]}`.
+Each file is `{"description": ..., "cases": [...]}`, except `data_plane.json` (see below).
 
 | File | Covers | Case shape |
 | --- | --- | --- |
@@ -25,6 +27,7 @@ Each file is `{"description": ..., "cases": [...]}`.
 | `desired_state.json` | Combining the global, stream and node state hashes for one subscription (spec 2.2) | `global`, `stream`, `node` (hashes of strings, or null), `subscription` → `expect`; null fields mean the value given in code |
 | `directives.json` | Validating a directive and what applying it writes (spec 2.1, 5.2) | `builder`, `directive` → `expect`: `ACCEPTED` with the state `key`, wakeup `channel` and `fields` (or the `replay` to run), or `REJECTED` |
 | `traceparent.json` | Parsing W3C `traceparent` values read from entries | `traceparent` → `expect` (trace id, span id, flags) or null for invalid |
+| `data_plane.json` | Retry timing and exhaustion, DLQ entries, replay, lane consumer names ([data-plane.md](data-plane.md)) | Grouped by rule rather than one `cases` list: `retry_wait`, `retries_exhausted`, `dead_letter`, `replay`, `lane_consumer` |
 
 Rules the vectors pin down that are easy to get wrong in a new language:
 
@@ -39,6 +42,9 @@ Rules the vectors pin down that are easy to get wrong in a new language:
 - `reason` in a rejected directive and `expect_error` are explanations, not compared: any
   rejection passes.
 - `traceparent` parsing is strict: lowercase hex, no surrounding whitespace.
+- `x-error` is cut to 1000 Unicode code points. In JavaScript, `slice` counts UTF-16 units and
+  can split an emoji; use `Array.from(error).slice(0, 1000).join("")`.
+- Retry waits are floating point (`backoff` may be 1.5); compare with a small tolerance.
 
 A runner is a few lines in each language. The Python one is `tests/test_conformance.py`.
 
