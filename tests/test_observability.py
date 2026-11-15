@@ -1,5 +1,6 @@
 """W3C traceparent propagation and per-message log capture."""
 
+import json
 import logging
 from typing import Any
 
@@ -89,7 +90,7 @@ def test_publishing_outside_a_trace(make_broker, r, name):
 
 
 def test_log_capture_stores_each_message_logs(make_broker, r, name):
-    broker = make_broker(middlewares=[TraceContext(), LogCapture(ttl=120)])
+    broker = make_broker(middlewares=[TraceContext(), LogCapture(ttl=120, exceptions=True)])
     stream = Stream(name, group="g")
     ids: list = []
     app = logging.getLogger("app.orders")
@@ -152,3 +153,75 @@ def test_log_capture_failure_never_fails_the_message(make_broker, r, name, caplo
     broker.client = real
     assert wait_until(lambda: int(r.xpending(sk(name), "g")["pending"]) == 0)
     broker.stop(5)
+
+
+def run_one(make_broker, name, capture, handler):
+    """Publish one message to a broker with ``capture``, wait for it, return its records."""
+    broker = make_broker(middlewares=[capture])
+    ids: list = []
+
+    @broker.subscribe(Stream(name, group="g"), max_retries=0, **fast())
+    def handle(body: dict, msg: Message) -> None:
+        ids.append(msg.id)
+        handler()
+
+    broker.start()
+    broker.publish(name, {"n": 1})
+    assert wait_until(lambda: int(broker.client.xpending(sk(name), "g")["pending"]) == 0
+                      and len(ids) == 1)
+    records = read_logs(broker, name, ids[0])
+    broker.stop(5)
+    return records
+
+
+def test_exception_text_is_not_stored_by_default(make_broker, name):
+    def fail() -> None:
+        try:
+            raise KeyError("card 4111-1111")
+        except KeyError:
+            logging.getLogger("app").exception("lookup failed")
+        raise ValueError("customer jane@example.com not found")
+
+    records = run_one(make_broker, name, LogCapture(), fail)
+    assert [(x["level"], x["message"], x.get("exc_type")) for x in records] == [
+        ("ERROR", "lookup failed", "KeyError"),
+        ("ERROR", "handler raised ValueError", "ValueError"),
+    ]
+    assert not any("exc" in x for x in records)
+    assert "jane@example.com" not in json.dumps(records)
+    assert "4111" not in json.dumps(records)
+
+
+def test_only_the_named_loggers_are_captured(make_broker, name):
+    def emit() -> None:
+        logging.getLogger("app").warning("kept")
+        logging.getLogger("app.orders").warning("kept too")
+        logging.getLogger("application").warning("not this one")
+        logging.getLogger("thirdparty").warning("nor this")
+
+    records = run_one(make_broker, name, LogCapture(loggers=["app"]), emit)
+    assert [x["message"] for x in records] == ["kept", "kept too"]
+
+
+def test_redact_changes_or_drops_records(make_broker, name):
+    def redact(record: dict) -> Any:
+        if "secret" in record["message"]:
+            return None
+        return {**record, "message": record["message"].replace("jane@example.com", "<email>")}
+
+    def emit() -> None:
+        logging.getLogger("app").warning("mail to jane@example.com")
+        logging.getLogger("app").warning("token secret-123")
+
+    records = run_one(make_broker, name, LogCapture(redact=redact), emit)
+    assert [x["message"] for x in records] == ["mail to <email>"]
+
+
+def test_a_failing_redact_drops_the_logs_but_not_the_message(make_broker, name, caplog):
+    def redact(record: dict) -> Any:
+        raise RuntimeError("bug in redact")
+
+    records = run_one(make_broker, name, LogCapture(redact=redact),
+                      lambda: logging.getLogger("app").warning("hi"))
+    assert records == []
+    assert "could not store the logs" in caplog.text

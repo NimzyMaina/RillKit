@@ -103,7 +103,10 @@ class Broker:
 
             self.control = controlplane.ControlPlane(self, control)
             own = [type(m) for m in middlewares]
-            for extra in (TraceContext, LogCapture):
+            extras: list[type[BaseMiddleware]] = [TraceContext]
+            if control.capture_logs:
+                extras.append(LogCapture)
+            for extra in extras:
                 if extra not in own:
                     self.use(extra())
         for mw in middlewares:

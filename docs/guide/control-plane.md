@@ -108,7 +108,9 @@ Each managed worker writes a heartbeat every `heartbeat_interval` seconds (defau
 
 ## Tracing and logs
 
-A managed broker adds the [`TraceContext` and `LogCapture`](/reference/middleware#tracecontext) middleware, so W3C `traceparent` headers follow messages across streams, and each handler run's log records are kept for a day in a stream per message (`read_logs(broker, stream, msg_id)`). Both work without the control plane too, if you add them yourself.
+A managed broker adds the [`TraceContext`](/reference/middleware#tracecontext) middleware, so W3C `traceparent` headers follow messages across streams.
+
+Log capture is opt-in. Handler logs often contain message data, and captured logs are stored in your Redis or Valkey and shown to anyone with dashboard access. Turn it on with `Control(capture_logs=True)`, `RILLKIT_CAPTURE_LOGS=true` or `capture_logs = true` under `[control]`: each handler run's log records are then kept for a day in a stream per message (`read_logs(broker, stream, msg_id)`), without exception messages or tracebacks. To choose loggers, redact records or keep exception text, add [`LogCapture(...)`](/reference/middleware#logcapture) yourself instead. Both middleware work without the control plane too.
 
 ## Failure behaviour
 

@@ -71,9 +71,27 @@ It propagates ids only; exporting spans is up to you. A broker with the [control
 ```python
 from rillkit import LogCapture, read_logs
 
-broker = Broker(middlewares=[LogCapture(ttl=24 * 3600, max_records=200)])
+def redact(record: dict) -> dict | None:
+    if "token" in record["message"]:
+        return None                                  # drop it
+    return {**record, "message": mask_emails(record["message"])}
+
+broker = Broker(middlewares=[LogCapture(ttl=24 * 3600, max_records=200, loggers=["app"],
+                                        redact=redact, exceptions=False)])
 records = read_logs(broker, "orders", msg_id)
 ```
 
-Stores the log records emitted while a handler runs (in its thread) in a stream per message, the key builder's `logs(stream, id)` key, which expires after `ttl` seconds. Each record has `ts`, `level`, `logger`, `message`, and when present `exc`, `traceparent`, `consumer` and `delivery`. An exception raised by the handler is recorded as an `ERROR`. Logging levels still apply: records below a logger's effective level are never emitted, so never captured. Failing to store the logs never fails the message. A broker with the control plane on adds it automatically.
+Stores the log records emitted while a handler runs (in its thread) in a stream per message, the key builder's `logs(stream, id)` key, which expires after `ttl` seconds. Each record has `ts`, `level`, `logger`, `message`, `consumer`, `delivery`, and when present `traceparent` and `exc_type` (or `exc`). An exception raised by the handler is recorded as an `ERROR`.
+
+| Option | Default | |
+| --- | --- | --- |
+| `loggers` | every logger | Capture only these loggers and their children: `["app"]` takes `app.orders`, not `application` |
+| `redact` | none | Called with each record before it is stored; return a changed record, or `None` to drop it |
+| `exceptions` | `False` | Store exception messages and tracebacks (`exc`). Off, only the class name is kept (`exc_type`), because exception text often holds message data |
+
+::: warning Logs can contain personal data
+Whatever a handler logs is copied to Redis or Valkey for `ttl` seconds, and a control plane may show it on its dashboard. Capture only the loggers you need, and redact anything sensitive.
+:::
+
+Logging levels still apply: records below a logger's effective level are never emitted, so never captured. Failing to store the logs, or a `redact` that raises, never fails the message; that run's records are dropped with a warning. A managed broker adds it only with `Control(capture_logs=True)`.
 

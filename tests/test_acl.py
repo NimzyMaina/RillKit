@@ -124,7 +124,8 @@ def test_a_managed_worker_runs_as_a_tenant_acl_user(server_settings, tenant_user
 
     def managed(node_id: str) -> Broker:
         return Broker(settings=server_settings(username=user, password=password), keys=keys,
-                      control=Control(mode="valkey", node_id=node_id, heartbeat_interval=0.5))
+                      control=Control(mode="valkey", node_id=node_id, heartbeat_interval=0.5,
+                                      capture_logs=True))
 
     worker, admin = managed("node-1"), managed("admin")
     orders = Stream("orders", group="billing")

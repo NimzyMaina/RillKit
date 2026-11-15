@@ -361,8 +361,9 @@ def test_node_heartbeat_registry_and_telemetry(node, keys, r, name):
     assert r.zscore(keys.nodes(), "node-hb") is None
 
 
-def test_control_brokers_trace_and_capture_logs(node):
-    worker = node()
+def test_control_brokers_trace_and_capture_logs_only_when_asked(node):
+    assert [type(m).__name__ for m in node().middlewares] == ["TraceContext"]
+    worker = node(capture_logs=True)
     assert [type(m).__name__ for m in worker.middlewares] == ["TraceContext", "LogCapture"]
 
 

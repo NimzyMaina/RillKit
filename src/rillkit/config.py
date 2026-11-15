@@ -44,6 +44,7 @@ _FIELDS: dict[str, dict[str, str]] = {
     "control": {
         "mode": "mode", "url": "url", "api_key": "api_key", "node_id": "node_id",
         "heartbeat_interval": "heartbeat_interval", "refresh_interval": "refresh_interval",
+        "capture_logs": "capture_logs",
     },
 }
 _SECRETS = {"password", "api_key"}
@@ -174,8 +175,12 @@ class Control:
     often the node heartbeat is written, ``refresh_interval`` how often the desired state is
     re-read even without a wakeup (the fallback if Pub/Sub drops a message).
 
-    ``Control.from_env()`` reads RILLKIT_CONTROL, RILLKIT_CONTROL_URL, RILLKIT_API_KEY and
-    RILLKIT_NODE_ID, over the ``[control]`` section of the config file.
+    ``capture_logs`` adds ``LogCapture`` with its defaults, storing each handler run's logs in
+    Redis or Valkey for a day (exception text excluded). It is off by default because handler
+    logs often contain message data; add ``LogCapture(...)`` yourself to filter or redact.
+
+    ``Control.from_env()`` reads RILLKIT_CONTROL, RILLKIT_CONTROL_URL, RILLKIT_API_KEY,
+    RILLKIT_NODE_ID and RILLKIT_CAPTURE_LOGS, over the ``[control]`` section of the config file.
     """
 
     mode: str = "off"
@@ -184,6 +189,7 @@ class Control:
     node_id: Optional[str] = None
     heartbeat_interval: float = 10.0
     refresh_interval: float = 30.0
+    capture_logs: bool = False
 
     def __post_init__(self) -> None:
         self.mode = str(self.mode).strip().lower()
@@ -193,6 +199,8 @@ class Control:
             )
         if self.node_id is not None and not self.node_id:
             raise ConfigurationError("node_id must be a non-empty string or None")
+        if isinstance(self.capture_logs, str):
+            self.capture_logs = self.capture_logs.strip().lower() in ("1", "true", "yes", "on")
         if self.heartbeat_interval <= 0 or self.refresh_interval <= 0:
             raise ConfigurationError("control intervals must be positive")
         if self.mode == "relay":
@@ -216,7 +224,8 @@ class Control:
             values.update(load_config(path).get("control", {}))
         env = os.environ
         for var, name in (("RILLKIT_CONTROL", "mode"), ("RILLKIT_CONTROL_URL", "url"),
-                          ("RILLKIT_API_KEY", "api_key"), ("RILLKIT_NODE_ID", "node_id")):
+                          ("RILLKIT_API_KEY", "api_key"), ("RILLKIT_NODE_ID", "node_id"),
+                          ("RILLKIT_CAPTURE_LOGS", "capture_logs")):
             if env.get(var):
                 values[name] = env[var]
         values.update(overrides)

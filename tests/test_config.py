@@ -197,6 +197,15 @@ def test_control_validation():
     assert Control(mode=" VALKEY ").mode == "valkey"
 
 
+def test_capture_logs_is_off_unless_asked(tmp_path, monkeypatch):
+    assert Control(mode="valkey").capture_logs is False
+    monkeypatch.setenv("RILLKIT_CAPTURE_LOGS", "true")
+    assert Control.from_env().capture_logs is True
+    monkeypatch.delenv("RILLKIT_CAPTURE_LOGS")
+    path = write(tmp_path, "rk.toml", "[control]\ncapture_logs = true\n")
+    assert Control.from_env(config=path).capture_logs is True
+
+
 def test_control_from_env(monkeypatch):
     monkeypatch.setenv("RILLKIT_CONTROL", "relay")
     monkeypatch.setenv("RILLKIT_CONTROL_URL", "wss://cloud.example")
