@@ -6,7 +6,7 @@ SDK (rillkit 0.3 plus the control-plane work); the rules marked with a vector ar
 `conformance/data_plane.json`.
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Key names always come from
-the key builder (section 4 of the control-plane specification, checked by
+the key builder (section 4 of [control-plane.md](control-plane.md), checked by
 `conformance/keys.json`); this document writes them as `stream key`, `DLQ key` and so on.
 
 ## 1. Entries

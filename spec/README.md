@@ -14,8 +14,8 @@ The prose rules (behaviour, atomicity, failure handling):
 
 - [`data-plane.md`](data-plane.md): entries, publishing, consumer groups, retries, ack policies,
   the DLQ and replay, heartbeats, idempotency markers and trace context.
-- The keyspace and the control plane are specified in the control-plane specification, which
-  is not in this repository yet. They will move here as `keyspace.md` and `control-plane.md`.
+- [`control-plane.md`](control-plane.md): the architecture, the worker state machine, the
+  keyspace (section 4), tenant isolation and the wire protocol (section 5), and the milestones.
 
 ## Conformance vectors
 
