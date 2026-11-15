@@ -182,11 +182,12 @@ From strongest to weakest:
 | How | Example |
 | --- | --- |
 | Pass a builder to the broker | `Broker.from_env(keys=HashTagKeys(prefix="shop", tenant="t-42"))` |
+| Set a tenant or prefix in the environment | `RILLKIT_TENANT=t-42`, `RILLKIT_KEY_PREFIX=shop` (both imply `hashtag`) |
 | Name a layout in the environment | `RILLKIT_KEY_LAYOUT=hashtag` (or `plain`) |
 | Name a layout in code | `Settings(key_layout="hashtag")` |
 | Nothing: follow the client | `PlainKeys` for a standalone client, `HashTagKeys` for a cluster client, including one you pass as `client=` |
 
-The prefix and tenant are set in code with `HashTagKeys(...)`; they have no environment variable.
+The prefix and tenant can also be set as `Settings(key_prefix=..., tenant=...)`, or in the `[keys]` section of the [config file](/guide/configuration#config-file). Either one implies hash-tagged keys; combining them with `key_layout="plain"` raises `ConfigurationError`.
 
 ```bash
 export RILLKIT_URL=redis://localhost:6379/0
@@ -258,7 +259,7 @@ When one Redis or Valkey server holds data for several tenants:
 - **Isolate with ACL users**, not with key names. Give each tenant a user that may only touch its own keys and channels, and only run the commands RillKit needs:
 
   ```text
-  ACL SETUSER tenant-t-42 on >SECRET resetkeys resetchannels ~shop:{t-42:* &shop:{t-42:* -@all +@connection +@stream +@string +@hash +@sortedset +@transaction +del +exists +ssubscribe +sunsubscribe +spublish +subscribe +unsubscribe +publish +cluster|slots +cluster|shards +cluster|nodes +readonly +readwrite
+  ACL SETUSER tenant-t-42 on >SECRET resetkeys resetchannels ~shop:{t-42:* &shop:{t-42:* -@all +@connection +@stream +@string +@hash +@sortedset +@transaction +del +exists +expire +ssubscribe +sunsubscribe +spublish +subscribe +unsubscribe +publish +cluster|slots +cluster|shards +cluster|nodes +readonly +readwrite
   ```
 
   The key pattern ends right after the tenant's `:`, so it does not match tenant `t-42x`, and it does not match keys built without a tenant. On a cluster, create the user on every node, replicas included: ACL users are per server.
@@ -266,7 +267,7 @@ When one Redis or Valkey server holds data for several tenants:
   ::: warning Use an allowlist, not `+@all -@dangerous`
   Key patterns stop a user from reading or writing other keys, but **not from listing their names**: `SCAN` returns every key name in the database, and it is not in `@dangerous`. With `+@all -@dangerous`, tenant `t-42` can list `shop:{t-43:payroll}:stream` and learn another tenant's id and stream names. The allowlist above leaves out `SCAN`, `KEYS`, `RANDOMKEY`, `PUBSUB`, `CLIENT`, `INFO`, `CONFIG` and every admin command. RillKit never needs them: `active_workers` reads the [consumer registry](#where-the-group-and-worker-name-appear) instead of scanning.
 
-  RillKit's test suite runs a whole worker (publishing, consuming, retries, the DLQ, replay, `Idempotent`, heartbeats and `active_workers`) as a user with exactly this rule, on a single server and on a cluster.
+  RillKit's test suite runs a whole worker (publishing, consuming, retries, the DLQ, replay, `Idempotent`, heartbeats and `active_workers`) as a user with exactly this rule, on a single server and on a cluster, and a [managed worker](/guide/control-plane) too (desired state, wakeups, node heartbeats, directives and log capture; `+expire` is for their TTLs).
   :::
 - **One client per broker.** Each broker has its own connection pool and consumer threads, and `broker.stop()` closes its client, so do not share one client between tenant brokers.
 - **Busy tenants:** each (tenant, stream) pair lives in one cluster slot. Spread a heavy tenant over several streams rather than expecting one stream to use several nodes.
@@ -284,12 +285,28 @@ Anything that writes to a stream without RillKit (another service, a script) mus
 
 Subclass [`KeyBuilder`](/reference/keys) and implement `stream`, `dlq` and `heartbeat_prefix`; override `idempotency` to move `Idempotent` markers too (by default they stay at `rillkit:done:<stream>:<key>`). On a cluster, keep the stream and DLQ in one hash slot so the DLQ move stays a transaction; if they are not, RillKit falls back to two ordered steps (see [DLQ atomicity](/guide/cluster#dlq-atomicity)).
 
-## Reserved names
+## Control-plane keys
 
-Some names are kept free for upcoming RillKit features, so adding those never moves or collides with your keys:
+A [managed worker](/guide/control-plane) also uses these. With the control plane off, none of them is ever read or written.
 
-- With `PlainKeys`: anything under `rillkit:` besides `rillkit:workers:`, `rillkit:consumers:` and `rillkit:done:`. Do not name streams `rillkit:...`.
-- With `HashTagKeys`: the tag `{<tenant>:}` (`{:}` without a tenant) inside each prefix, and the suffixes `logs` and `cordon` after a stream's tag. No stream can produce that tag, since stream names are non-empty and their colons are encoded.
+| Purpose | Type | `PlainKeys` | `HashTagKeys(prefix="shop", tenant="t-42")` |
+| --- | --- | --- | --- |
+| Global desired state | HASH | `rillkit:state:global` | `shop:{t-42:}:state:global` |
+| Stream desired state | HASH | `rillkit:state:stream:orders:billing` | `shop:{t-42:}:state:stream:orders:billing` |
+| Node desired state | HASH | `rillkit:state:node:<node>` | `shop:{t-42:}:state:node:<node>` |
+| Directive dedup | STRING, TTL 60 s | `rillkit:dedup:<directive>` | `shop:{t-42:}:dedup:<directive>` |
+| Node heartbeat | HASH, TTL | `rillkit:nodes:<node>` | `shop:{t-42:}:nodes:<node>` |
+| Node registry | ZSET | `rillkit:nodes` | `shop:{t-42:}:nodes` |
+| Broadcast wakeups | channel | `rillkit:ctl:broadcast` | `shop:{t-42:}:ctl:broadcast` |
+| Node wakeups | channel | `rillkit:ctl:node:<node>` | `shop:{t-42:}:ctl:node:<node>` |
+| Per-message logs | STREAM, TTL | `rillkit:logs:orders:<id>` | `shop:{t-42:orders}:logs:<id>` |
+| Producer cordon (reserved) | STRING | `rillkit:cordon:orders` | `shop:{t-42:orders}:cordon` |
+| Cordon buffer (reserved) | STREAM | `rillkit:cordon:orders:buffer` | `shop:{t-42:orders}:cordon:buffer` |
+
+- The control keys of one namespace share a slot (the tag `{<tenant>:}`, or `{:}` without a tenant), so a directive's dedup check and state write are one transaction on a cluster. No stream can produce that tag, since stream names are non-empty and their colons are encoded.
+- Logs and cordon keys share their stream's slot.
+- With `PlainKeys`, stream names in these keys are encoded (`%`, `:`), and `rillkit:` is reserved: do not name streams `rillkit:...`.
+- Custom `KeyBuilder`s get the `PlainKeys` names unless they override the methods.
 
 ::: warning Changing the layout moves your data
 The layout decides which keys are read. Switching an existing deployment to another layout, prefix or tenant starts from empty streams; old pending messages, DLQ entries, consumer groups and `Idempotent` markers stay under the old keys.

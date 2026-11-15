@@ -64,6 +64,10 @@ Reads these environment variables. Keyword arguments override them. For each con
 | `RILLKIT_MODE` | | `mode` | `"standalone"` |
 | `RILLKIT_CLUSTER_NODES` | | `cluster_nodes`, comma-separated | `()` |
 | `RILLKIT_KEY_LAYOUT` | | `key_layout` | `None` |
+| `RILLKIT_KEY_PREFIX` | | `key_prefix` | `None` |
+| `RILLKIT_TENANT` | | `tenant` | `None` |
+
+`Settings.from_env(prefix="REDIS_", *, config=None, **overrides)`: `config` (else `RILLKIT_CONFIG`) names a [config file](/guide/configuration#config-file) whose `[connection]` and `[keys]` sections fill in what the environment leaves unset.
 
 When a URL is set, the username and password variables are not read, and host, port, db and ssl are ignored by the client. Setting `RILLKIT_HOST`, `PORT`, `DB`, `USERNAME`, `PASSWORD` or `SSL` next to a URL logs a warning on the `rillkit` logger.
 

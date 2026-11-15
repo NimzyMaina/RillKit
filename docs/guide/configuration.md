@@ -30,6 +30,10 @@ broker = Broker.from_env()
 | `RILLKIT_MODE` | | `standalone` | `standalone` or `cluster` |
 | `RILLKIT_CLUSTER_NODES` | | none | Cluster seed nodes, `host:port,host:port` |
 | `RILLKIT_KEY_LAYOUT` | | depends on mode | `plain` or `hashtag`, see [Keys](/guide/keys) |
+| `RILLKIT_KEY_PREFIX` | | none | A prefix for hash-tagged keys, for several apps on one server. Implies `hashtag` |
+| `RILLKIT_TENANT` | | none | A tenant id inside every hash tag. Implies `hashtag` with the prefix `rk` |
+| `RILLKIT_CONFIG` | | none | Path of a [config file](#config-file) |
+| `RILLKIT_CONTROL` | | `off` | `off`, `valkey` or `relay`, see [Control plane](/guide/control-plane) |
 
 A URL or separate fields, whichever suits your platform:
 
@@ -105,6 +109,32 @@ redis://localhost:6380/0
 ```
 
 `Broker.from_env(prefix="REDIS_", **kwargs)` passes extra keyword arguments such as `middlewares=[...]` or `keys=...` to `Broker`. To override settings, build them yourself: `Broker(settings=Settings.from_env(backend="valkey"))`.
+
+## Config file
+
+Optional. RillKit reads one only when `RILLKIT_CONFIG=<path>` or `config=<path>` names it; a file in the working directory is never picked up on its own. TOML and JSON work out of the box, YAML with `pip install "rillkit[yaml]"`.
+
+```toml [rillkit.toml]
+[connection]            # Settings fields, same names as the RILLKIT_* variables
+url = "rediss://cache.internal:6379/0"
+backend = "valkey"
+mode = "cluster"
+password_env = "CACHE_PASSWORD"   # the variable that holds it, or password_file = "/run/secrets/pw"
+
+[keys]
+layout = "hashtag"      # or prefix = "shop", tenant = "t-42"
+
+[control]
+mode = "valkey"
+```
+
+```python
+broker = Broker.from_env(config="rillkit.toml")   # or RILLKIT_CONFIG=rillkit.toml
+```
+
+- The environment wins over the file, and code wins over both.
+- Secrets are referenced, never stored: `password`, `api_key` and a `url` with a password in it are refused. Use `<name>_env` or `<name>_file`.
+- An unknown section or field raises `ConfigurationError`.
 
 ## Redis or Valkey
 

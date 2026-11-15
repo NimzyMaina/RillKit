@@ -38,6 +38,8 @@ class Message:
         self._client = client
         self._body: Any = _MISSING
         self.error: Optional[BaseException] = None
+        # W3C traceparent of the span handling this message, set by ``TraceContext``
+        self.traceparent: Optional[str] = None
 
     @property
     def body(self) -> Any:

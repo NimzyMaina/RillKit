@@ -5,16 +5,20 @@ import threading
 import time
 from collections.abc import Sequence
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from .ack import AckPolicy
 from .clients import CLIENT_ERRORS, Client, is_cluster, run_together
+from .config import Control
 from .consumer import Subscriber, _text
-from .exceptions import PublishError
+from .exceptions import ConfigurationError, PublishError
 from .keys import HashTagKeys, KeyBuilder, PlainKeys
 from .middleware import BaseMiddleware, PublishCommand
 from .settings import Settings
 from .stream import Stream, StreamLike, as_stream
+
+if TYPE_CHECKING:
+    from .controlplane import ControlPlane
 
 log = logging.getLogger("rillkit")
 
@@ -55,6 +59,10 @@ class Broker:
     ``stop()`` closes it. ``keys`` picks the physical key layout; by default it comes from
     ``settings.key_layout``, else plain keys on a standalone client and hash-tagged keys on a
     cluster client.
+
+    ``control`` connects the broker to a RillKit control plane (see ``Control``). When it is not
+    given it comes from RILLKIT_CONTROL and the config file, and is off unless one of them turns
+    it on. Off, the broker is the plain library and ``broker.control`` is None.
     """
 
     def __init__(
@@ -65,18 +73,39 @@ class Broker:
         settings: Optional[Settings] = None,
         middlewares: Sequence[BaseMiddleware] = (),
         keys: Optional[KeyBuilder] = None,
+        control: Optional[Control] = None,
     ) -> None:
+        if control is None:
+            control = Control.from_env()
+        if control.mode == "relay":
+            raise ConfigurationError(
+                "control mode 'relay' needs the Relay client, which this version of rillkit does "
+                "not include yet; use mode 'valkey' with a control plane that writes to the server"
+            )
         if client is None:
             settings = settings or Settings(url=url)
             client = settings.client()
         self.client = client
         if keys is None:
-            if settings is not None and settings.key_layout is not None:
+            if settings is not None and settings.has_key_settings:
                 keys = settings.key_builder()
             else:
                 keys = HashTagKeys() if is_cluster(client) else PlainKeys()
         self.keys: KeyBuilder = keys
         self.middlewares: list[BaseMiddleware] = []
+        self.control_settings = control
+        self.control: Optional[ControlPlane] = None
+        if control.enabled:
+            # imported only when used, so a broker with the control plane off loads none of it
+            from . import controlplane
+            from .logs import LogCapture
+            from .tracing import TraceContext
+
+            self.control = controlplane.ControlPlane(self, control)
+            own = [type(m) for m in middlewares]
+            for extra in (TraceContext, LogCapture):
+                if extra not in own:
+                    self.use(extra())
         for mw in middlewares:
             self.use(mw)
         self.subscribers: list[Subscriber] = []
@@ -88,8 +117,14 @@ class Broker:
         self._stopped = False
 
     @classmethod
-    def from_env(cls, prefix: str = "REDIS_", **kwargs: Any) -> "Broker":
-        return cls(settings=Settings.from_env(prefix), **kwargs)
+    def from_env(
+        cls, prefix: str = "REDIS_", *, config: Optional[str] = None, **kwargs: Any
+    ) -> "Broker":
+        """A broker from RILLKIT_* variables, over the config file (``config`` or
+        RILLKIT_CONFIG) if one is named. Keyword arguments are passed to ``Broker``."""
+        if "control" not in kwargs:
+            kwargs["control"] = Control.from_env(config=config)
+        return cls(settings=Settings.from_env(prefix, config=config), **kwargs)
 
     # middleware
 
@@ -117,8 +152,12 @@ class Broker:
         heartbeat: bool = True,
         heartbeat_ttl: int = 60,
         group_start_id: str = "0",
+        concurrency: int = 1,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register a handler for a stream. The handler is returned unchanged."""
+        """Register a handler for a stream. The handler is returned unchanged.
+
+        ``concurrency`` runs that many consumer loops (threads) for the stream, named
+        ``<consumer>``, ``<consumer>-1``, ... A control plane can change it at run time."""
         resolved = as_stream(stream)
         if group:
             resolved = Stream(resolved.name, group, resolved.dlq, resolved.maxlen, resolved.codec)
@@ -132,7 +171,7 @@ class Broker:
                 claim_idle_ms=claim_idle_ms, backoff=backoff, max_backoff_ms=max_backoff_ms,
                 block_ms=block_ms, count=count, middlewares=own,
                 consumer=consumer, heartbeat=heartbeat, heartbeat_ttl=heartbeat_ttl,
-                group_start_id=group_start_id,
+                group_start_id=group_start_id, concurrency=concurrency,
             ))
             return func
 
@@ -162,8 +201,9 @@ class Broker:
     def _xadd(self, cmd: PublishCommand) -> str:
         try:
             payload = cmd.stream.codec.encode(cmd.body)
+            fields: dict[Any, Any] = {"data": payload, **cmd.headers}
             entry_id = self.client.xadd(
-                self.keys.stream(cmd.stream), {"data": payload}, maxlen=cmd.maxlen,
+                self.keys.stream(cmd.stream), fields, maxlen=cmd.maxlen,
                 approximate=cmd.approximate,
             )
         except CLIENT_ERRORS + (TypeError, ValueError) as e:
@@ -208,8 +248,13 @@ class Broker:
         self.client.ping()
         for sub in self.subscribers:
             sub.setup()
+        if self.control is not None:
+            # before any polling, so a new worker honours PAUSED or MAINTENANCE from the start
+            self.control.hydrate()
         for sub in self.subscribers:
             sub.start()
+        if self.control is not None:
+            self.control.start()
         self._run_hooks("after_startup")
 
     def stop(self, timeout: Optional[float] = None) -> None:
@@ -225,6 +270,8 @@ class Broker:
                 sub.stop()
             for sub in self.subscribers:
                 sub.join(timeout)
+            if self.control is not None:
+                self.control.stop(timeout)
             try:
                 self._run_hooks("on_shutdown")
             finally:
@@ -253,7 +300,7 @@ class Broker:
         try:
             self.start()
             while not requested.wait(0.5):
-                if not any(s._thread and s._thread.is_alive() for s in self.subscribers):
+                if not any(s.is_alive() for s in self.subscribers):
                     break
             self.stop(shutdown_timeout)
         finally:

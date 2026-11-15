@@ -67,6 +67,7 @@ export default defineConfig({
             { text: 'Keys', link: '/guide/keys' },
             { text: 'Redis and Valkey Cluster', link: '/guide/cluster' },
             { text: 'Operations', link: '/guide/operations' },
+            { text: 'Control plane', link: '/guide/control-plane' },
             { text: 'Testing', link: '/guide/testing' },
             { text: 'Upgrading', link: '/guide/upgrading' },
           ],

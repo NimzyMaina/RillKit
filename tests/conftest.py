@@ -91,6 +91,8 @@ def make_broker(
             sub.stop()
         for sub in broker.subscribers:
             sub.join(10)
+        if broker.control is not None:
+            broker.control.stop(5)
         broker.client.close()
 
 

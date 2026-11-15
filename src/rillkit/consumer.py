@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("rillkit")
 
 RETRY_BACKOFF_SECONDS = 5
+RUNNING = "RUNNING"
 __all__ = ["HEARTBEAT_PREFIX", "Subscriber"]
 
 
@@ -89,9 +90,12 @@ class Subscriber:
         heartbeat: bool = True,
         heartbeat_ttl: int = 60,
         group_start_id: str = "0",
+        concurrency: int = 1,
     ) -> None:
         if not stream.group:
             raise ValueError(f"stream {stream.name!r} needs a group to be consumed")
+        if concurrency < 1:
+            raise ValueError("concurrency must be at least 1")
         self.broker = broker
         self.stream = stream
         self.group: str = stream.group
@@ -103,15 +107,26 @@ class Subscriber:
         self.max_backoff_ms = max_backoff_ms
         self.block_ms = block_ms
         self._block_ms = block_ms  # what is actually used, see setup()
+        self._max_block_ms: Optional[int] = None  # the most the socket timeout allows
         self.count = count
         self.own_middlewares = list(middlewares)
         self.consumer = consumer or f"{stream.group}-{socket.gethostname()}-{os.getpid()}"
         self.heartbeat = heartbeat
         self.heartbeat_ttl = heartbeat_ttl
         self.group_start_id = group_start_id
+        self.concurrency = concurrency
         self._plan = _plan(handler)
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        # Lanes are consumer loops, each with its own consumer name (lane 0 uses ``consumer``).
+        # Their number is ``concurrency``, or what the control plane asks for.
+        self._lanes: dict[int, threading.Thread] = {}
+        self._threads: list[threading.Thread] = []  # every lane thread started, for join()
+        self._first: Optional[threading.Thread] = None
+        self._lanes_lock = threading.Lock()
+        self._target = 0
+        self._counter_lock = threading.Lock()
+        self.in_flight = 0
+        self.processed = 0
 
     @property
     def client(self) -> Client:
@@ -140,12 +155,51 @@ class Subscriber:
         """The sorted set of live consumers of this stream and group (``active_workers``)."""
         return self.broker.keys.consumers(self.stream, self.group)
 
+    def lane_consumer(self, index: int) -> str:
+        """The consumer name of lane ``index``: ``consumer``, then ``<consumer>-1``, ..."""
+        return self.consumer if index == 0 else f"{self.consumer}-{index}"
+
+    @property
+    def _thread(self) -> Optional[threading.Thread]:
+        """The first lane's thread (the only one unless ``concurrency`` is above 1)."""
+        return self._first
+
+    @property
+    def lanes(self) -> int:
+        """How many lanes (consumer loops) are running now."""
+        with self._lanes_lock:
+            return sum(1 for t in self._lanes.values() if t.is_alive())
+
+    def is_alive(self) -> bool:
+        """Whether this subscriber is still consuming, or (under a control plane) waiting to."""
+        if self._stop.is_set():
+            return False
+        if self.broker.control is not None:
+            return True
+        return any(t.is_alive() for t in list(self._threads))
+
+    def _desired(self) -> tuple[str, int, int, int]:
+        """(state, lanes, block_ms, count) to use now: the control plane's, else the code's."""
+        control = self.broker.control
+        if control is None:
+            return RUNNING, self.concurrency, self._block_ms, self.count
+        d = control.desired(self)
+        block = self._block_ms
+        if d.block_ms is not None:
+            top = self._max_block_ms
+            block = d.block_ms if top is None else min(d.block_ms, top)
+        lanes = d.concurrency if d.concurrency is not None else self.concurrency
+        count = d.batch_size if d.batch_size is not None else self.count
+        return d.state, lanes, block, count
+
     # lifecycle
 
     def setup(self) -> None:
         # A blocking read that outlasts the client's socket timeout fails and is retried by
         # redis-py, so keep the block time a second under the timeout.
         timeout = socket_timeout(self.client)
+        if timeout is not None:
+            self._max_block_ms = max(100, int((timeout - 1) * 1000))
         if timeout is not None and self.block_ms / 1000 > timeout - 1:
             self._block_ms = max(100, int((timeout - 1) * 1000))
             log.warning(
@@ -162,32 +216,87 @@ class Subscriber:
                 raise
 
     def start(self) -> None:
-        self._thread = threading.Thread(
-            target=self._run, name=f"rillkit-{self.stream.name}", daemon=True
-        )
-        self._thread.start()
+        self._stop.clear()
+        self.reconcile()
+
+    def reconcile(self) -> None:
+        """Start or retire lanes to match the desired number. Retired lanes finish the messages
+        they already read, then deregister. ``DRAINING`` means zero lanes."""
+        state, lanes, _, _ = self._desired()
+        with self._lanes_lock:
+            self._target = 0 if state == "DRAINING" or self._stop.is_set() else lanes
+            for index in range(self._target):
+                thread = self._lanes.get(index)
+                if thread is not None and thread.is_alive():
+                    continue
+                thread = threading.Thread(
+                    target=self._run, args=(index,), daemon=True,
+                    name=f"rillkit-{self.stream.name}" + (f"-{index}" if index else ""),
+                )
+                self._lanes[index] = thread
+                self._threads = [t for t in self._threads if t.is_alive()] + [thread]
+                if index == 0:
+                    self._first = thread
+                thread.start()
 
     def stop(self) -> None:
         self._stop.set()
+        control = self.broker.control
+        if control is not None:
+            control.wake()
 
     def join(self, timeout: Optional[float] = None) -> None:
-        if self._thread:
-            self._thread.join(timeout)
+        deadline = None if timeout is None else time.monotonic() + timeout
+        for thread in list(self._threads):
+            left = None if deadline is None else max(0.0, deadline - time.monotonic())
+            thread.join(left)
 
-    def _run(self) -> None:
+    def _retire(self, index: int) -> bool:
+        """Whether lane ``index`` should stop. If so it is removed, and its heartbeat with it,
+        under the lanes lock so a restarted lane of the same index never loses its heartbeat."""
+        with self._lanes_lock:
+            if not self._stop.is_set() and index < self._target:
+                return False
+            if self._lanes.get(index) is threading.current_thread():
+                self._unregister(self.lane_consumer(index))
+                del self._lanes[index]
+            return True
+
+    def _unregister(self, consumer: str) -> None:
+        if not self.heartbeat:
+            return
+        try:
+            pipe = self.client.pipeline(transaction=False)
+            pipe.delete(self.broker.keys.heartbeat(self.stream, self.group, consumer))
+            pipe.zrem(self.registry_key, consumer)
+            pipe.execute()
+        except Exception as e:
+            log.error("could not remove heartbeat key: %s", e)
+
+    def _run(self, index: int = 0) -> None:
+        consumer = self.lane_consumer(index)
         log.info(
             "consumer started | stream: %s | group: %s | consumer: %s | policy: %s"
             " | max retries: %s",
-            self.stream.name, self.group, self.consumer, self.ack_policy.value,
+            self.stream.name, self.group, consumer, self.ack_policy.value,
             self.max_retries,
         )
+        control = self.broker.control
         try:
-            while not self._stop.is_set():
-                self._beat()
+            while not self._retire(index):
+                self._beat(consumer)
+                version = control.version if control is not None else 0
+                state, _, block_ms, count = self._desired()
+                if state != RUNNING:
+                    # paused, in maintenance or draining: in-flight messages are done, so wait
+                    # for the next change, beating now and then to stay visible
+                    assert control is not None
+                    control.wait(version, max(1.0, self.heartbeat_ttl / 3))
+                    continue
                 try:
-                    for msg in self._claim():
+                    for msg in self._claim(consumer, count):
                         self._process(msg)
-                    for msg in self._read():
+                    for msg in self._read(consumer, count, block_ms):
                         if self._stop.is_set():
                             break  # unread leftovers stay pending, claimed after the idle time
                         self._process(msg)
@@ -199,31 +308,29 @@ class Subscriber:
                 except Exception as e:  # client or other loop-level error: keep the worker alive
                     self._loop_error(e)
         finally:
-            if self.heartbeat:
-                try:
-                    pipe = self.client.pipeline(transaction=False)
-                    pipe.delete(self.heartbeat_key)
-                    pipe.zrem(self.registry_key, self.consumer)
-                    pipe.execute()
-                except Exception as e:
-                    log.error("could not remove heartbeat key: %s", e)
+            with self._lanes_lock:
+                if self._lanes.get(index) is threading.current_thread():
+                    self._unregister(consumer)
+                    del self._lanes[index]
             log.info(
-                "consumer stopped | stream: %s | consumer: %s", self.stream.name, self.consumer
+                "consumer stopped | stream: %s | consumer: %s", self.stream.name, consumer
             )
 
     def _loop_error(self, e: Exception) -> None:
         log.error("consumer loop error, retrying in %s s: %s", RETRY_BACKOFF_SECONDS, e)
         self._stop.wait(RETRY_BACKOFF_SECONDS)
 
-    def _beat(self) -> None:
+    def _beat(self, consumer: Optional[str] = None) -> None:
         if not self.heartbeat:
             return
+        consumer = consumer or self.consumer
         now = time.time()
         try:
             pipe = self.client.pipeline(transaction=False)
-            pipe.set(self.heartbeat_key, int(now), ex=self.heartbeat_ttl)
+            key = self.broker.keys.heartbeat(self.stream, self.group, consumer)
+            pipe.set(key, int(now), ex=self.heartbeat_ttl)
             # the registry: this consumer is alive until now + ttl; drop entries already expired
-            pipe.zadd(self.registry_key, {self.consumer: int((now + self.heartbeat_ttl) * 1000)})
+            pipe.zadd(self.registry_key, {consumer: int((now + self.heartbeat_ttl) * 1000)})
             pipe.zremrangebyscore(self.registry_key, "-inf", int(now * 1000))
             pipe.execute()
         except Exception as e:
@@ -231,18 +338,26 @@ class Subscriber:
 
     # reading
 
-    def _message(self, id: Any, raw: dict[Any, Any], deliveries: int) -> Message:
+    def _message(
+        self, id: Any, raw: dict[Any, Any], deliveries: int, consumer: Optional[str] = None
+    ) -> Message:
         return Message(
-            _text(id), self.stream, _fields(raw), deliveries, self.consumer, self.client,
-            key=self.stream_key,
+            _text(id), self.stream, _fields(raw), deliveries, consumer or self.consumer,
+            self.client, key=self.stream_key,
         )
 
-    def _read(self) -> list[Message]:
+    def _read(
+        self, consumer: Optional[str] = None, count: Optional[int] = None,
+        block_ms: Optional[int] = None,
+    ) -> list[Message]:
+        consumer = consumer or self.consumer
         result: Any = self.client.xreadgroup(
-            self.group, self.consumer, {self.stream_key: ">"},
-            count=self.count, block=self._block_ms,
+            self.group, consumer, {self.stream_key: ">"},
+            count=count or self.count, block=block_ms or self._block_ms,
         )
-        return [self._message(i, f, 1) for _, entries in result or [] for i, f in entries]
+        return [
+            self._message(i, f, 1, consumer) for _, entries in result or [] for i, f in entries
+        ]
 
     def _required_idle_ms(self, times_delivered: int) -> float:
         wait = self.claim_idle_ms * (self.backoff ** max(times_delivered - 1, 0))
@@ -251,10 +366,11 @@ class Subscriber:
     def _exhausted(self, deliveries: int) -> bool:
         return self.max_retries is not None and deliveries > self.max_retries
 
-    def _claim(self) -> list[Message]:
+    def _claim(self, consumer: Optional[str] = None, count: Optional[int] = None) -> list[Message]:
         """Take over pending messages idle long enough, honouring the retry backoff."""
+        consumer = consumer or self.consumer
         pending: Any = self.client.xpending_range(
-            self.stream_key, self.group, "-", "+", self.count, idle=self.claim_idle_ms
+            self.stream_key, self.group, "-", "+", count or self.count, idle=self.claim_idle_ms
         )
         due = {
             _text(p["message_id"]): p["times_delivered"]
@@ -264,7 +380,7 @@ class Subscriber:
         if not due:
             return []
         claimed: Any = self.client.xclaim(
-            self.stream_key, self.group, self.consumer, self.claim_idle_ms, list(due)
+            self.stream_key, self.group, consumer, self.claim_idle_ms, list(due)
         )
         messages = []
         for id, raw in claimed:
@@ -274,9 +390,9 @@ class Subscriber:
             attempts = due[_text(id)]
             if self._exhausted(attempts):
                 # not run again, so the delivery count is the attempts it already had
-                self._dead_letter(self._message(id, raw, attempts), "retries exhausted")
+                self._dead_letter(self._message(id, raw, attempts, consumer), "retries exhausted")
                 continue
-            msg = self._message(id, raw, attempts + 1)
+            msg = self._message(id, raw, attempts + 1, consumer)
             messages.append(msg)
         return messages
 
@@ -310,6 +426,16 @@ class Subscriber:
         return call
 
     def _process(self, msg: Message) -> None:
+        with self._counter_lock:
+            self.in_flight += 1
+        try:
+            self._handle(msg)
+        finally:
+            with self._counter_lock:
+                self.in_flight -= 1
+                self.processed += 1
+
+    def _handle(self, msg: Message) -> None:
         policy = self.ack_policy
         exc: Optional[BaseException] = None
         if policy is AckPolicy.ACK_FIRST:
@@ -351,7 +477,7 @@ class Subscriber:
         elif msg.nacked and not msg.acked and self._exhausted(msg.deliveries):
             self._dead_letter(msg, (str(exc) or type(exc).__name__) if exc else "nacked")
         self._after(msg, exc)
-        self._beat()
+        self._beat(msg.consumer)
 
     def _after(self, msg: Message, exc: Optional[BaseException]) -> None:
         for mw in self.middlewares:

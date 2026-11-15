@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from .exceptions import AckMessage
@@ -11,12 +11,16 @@ if TYPE_CHECKING:
 
 @dataclass
 class PublishCommand:
-    """What ``publish_scope`` receives. Mutate it to change what gets published."""
+    """What ``publish_scope`` receives. Mutate it to change what gets published.
+
+    ``headers`` are extra fields written next to ``data`` in the stream entry (for example
+    ``traceparent``). Names starting with ``x-`` are reserved for rillkit's DLQ context."""
 
     stream: "Stream"
     body: Any
     maxlen: Optional[int] = None
     approximate: bool = True
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 class BaseMiddleware:

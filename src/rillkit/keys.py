@@ -7,13 +7,11 @@ and written. Every command rillkit sends goes through the broker's key builder.
 existing deployment sees the same keys. ``HashTagKeys`` (the default on a cluster) puts a stream,
 its DLQ and its heartbeats in one hash slot so the move to the DLQ can stay a transaction.
 
-Reserved for planned control-plane keys (worker state, directive dedup, node heartbeats, logs and
-producer cordons), so that adding them never moves or collides with existing keys:
+Control-plane keys (worker state, directive dedup, node heartbeats, wakeup channels, per-message
+logs and producer cordons) are built here too, so they never move or collide with data keys:
 
-- ``PlainKeys``: names under ``rillkit:`` other than ``rillkit:workers:``, ``rillkit:done:`` and
-  ``rillkit:consumers:``,
-  namely ``rillkit:state:``, ``rillkit:dedup:``, ``rillkit:nodes:``, ``rillkit:ctl:``,
-  ``rillkit:logs:`` and ``rillkit:cordon:``.
+- ``PlainKeys``: ``rillkit:state:``, ``rillkit:dedup:``, ``rillkit:nodes``, ``rillkit:ctl:``,
+  ``rillkit:logs:`` and ``rillkit:cordon:``, with stream names percent-encoded (``%`` and ``:``).
 - ``HashTagKeys``: the control tag ``{<tenant>:}`` (``{:}`` without a tenant) inside each
   prefix, and the suffixes ``logs`` and ``cordon`` after a stream's tag. No stream can produce
   the control tag: stream names are non-empty and their colons are percent-encoded.
@@ -27,6 +25,7 @@ from .stream import Stream
 HEARTBEAT_PREFIX = "rillkit:workers:"
 IDEMPOTENCY_PREFIX = "rillkit:done:"
 CONSUMERS_PREFIX = "rillkit:consumers:"
+CONTROL_PREFIX = "rillkit:"
 _GLOB_SPECIAL = str.maketrans({c: f"\\{c}" for c in "*?[]\\"})
 
 
@@ -68,6 +67,61 @@ class KeyBuilder:
         so finding workers never needs ``SCAN``."""
         return f"{CONSUMERS_PREFIX}{_escape_plain(stream.name)}:{group}"
 
+    # Control-plane keys. The defaults are the plain layout under ``rillkit:``, so a custom
+    # builder gets working control keys without overriding anything. ``HashTagKeys`` puts all of
+    # them except logs and cordons in one slot per namespace (the control tag).
+
+    def _control(self, suffix: str) -> str:
+        return f"{CONTROL_PREFIX}{suffix}"
+
+    def state_global(self) -> str:
+        """HASH: the desired state of every worker in the namespace."""
+        return self._control("state:global")
+
+    def state_stream(self, stream: Stream, group: str) -> str:
+        """HASH: the desired state of the workers of ``stream`` in ``group``."""
+        return self._control(f"state:stream:{_escape_plain(stream.name)}:{group}")
+
+    def state_node(self, node_id: str) -> str:
+        """HASH: the desired state of one node (worker process)."""
+        return self._control(f"state:node:{node_id}")
+
+    def dedup(self, directive_id: str) -> str:
+        """STRING with a TTL: set once a directive has been applied, so it is applied once."""
+        return self._control(f"dedup:{directive_id}")
+
+    def node(self, node_id: str) -> str:
+        """HASH with a TTL: a node's heartbeat and reported state."""
+        return self._control(f"nodes:{node_id}")
+
+    def nodes(self) -> str:
+        """ZSET: node id -> heartbeat expiry (ms). Lists nodes without ``SCAN``."""
+        return self._control("nodes")
+
+    def broadcast_channel(self) -> str:
+        """Pub/Sub channel that wakes every node of the namespace."""
+        return self._control("ctl:broadcast")
+
+    def node_channel(self, node_id: str) -> str:
+        """Pub/Sub channel that wakes one node."""
+        return self._control(f"ctl:node:{node_id}")
+
+    def logs(self, stream: Stream, msg_id: str) -> str:
+        """STREAM with a TTL: log records captured while handling one message."""
+        return self._control(f"logs:{_escape_plain(stream.name)}:{msg_id}")
+
+    def cordon(self, stream: Stream) -> str:
+        """STRING: set while producers to ``stream`` are cordoned (maintenance)."""
+        return self._control(f"cordon:{_escape_plain(stream.name)}")
+
+    def cordon_buffer(self, stream: Stream) -> str:
+        """STREAM: messages published to ``stream`` while it was cordoned, in order."""
+        return f"{self.cordon(stream)}:buffer"
+
+    def describe(self) -> dict[str, Optional[str]]:
+        """The ``keys`` descriptor reported to the control plane: layout, prefix and tenant."""
+        return {"layout": "custom", "prefix": None, "tenant": None}
+
 
 class PlainKeys(KeyBuilder):
     """The stream name is the key; the DLQ is ``dlq`` or ``<name>-dlq``. rillkit's original layout.
@@ -84,6 +138,9 @@ class PlainKeys(KeyBuilder):
 
     def heartbeat_prefix(self, stream: Stream, group: str) -> str:
         return f"{HEARTBEAT_PREFIX}{stream.name}:{group}:"
+
+    def describe(self) -> dict[str, Optional[str]]:
+        return {"layout": "plain", "prefix": None, "tenant": None}
 
     def __repr__(self) -> str:
         return "PlainKeys()"
@@ -108,6 +165,9 @@ class HashTagKeys(KeyBuilder):
         rk:{orders}:workers:<group>:<consumer>
         rk:{orders}:done:<idempotency key>
         rk:{orders}:consumers:<group>   (registry of live consumers)
+        rk:{orders}:logs:<message id>   (captured handler logs)
+        rk:{orders}:cordon              (and rk:{orders}:cordon:buffer)
+        rk:{:}:state:global             (control keys share the control tag, see control_tag)
 
     ``tenant`` adds an opaque id inside the tag (``rk:{t-42:orders}:stream``) so tenants' keys
     never collide. It is for placement and naming only, not access control: take it from trusted
@@ -157,6 +217,29 @@ class HashTagKeys(KeyBuilder):
 
     def consumers(self, stream: Stream, group: str) -> str:
         return f"{self._base(stream)}:consumers:{group}"
+
+    def control_tag(self) -> str:
+        """``{<tenant>:}``, or ``{:}`` without a tenant. No stream tag can equal it."""
+        tenant = "" if self.tenant is None else _escape(self.tenant, colon=True)
+        return f"{{{tenant}:}}"
+
+    def _control(self, suffix: str) -> str:
+        tag = self.control_tag()
+        return f"{self.prefix}:{tag}:{suffix}" if self.prefix else f"{tag}:{suffix}"
+
+    def state_stream(self, stream: Stream, group: str) -> str:
+        if not stream.name:
+            raise ConfigurationError("hash-tagged keys need a non-empty stream name")
+        return self._control(f"state:stream:{_escape(stream.name, colon=True)}:{group}")
+
+    def logs(self, stream: Stream, msg_id: str) -> str:
+        return f"{self._base(stream)}:logs:{msg_id}"
+
+    def cordon(self, stream: Stream) -> str:
+        return f"{self._base(stream)}:cordon"
+
+    def describe(self) -> dict[str, Optional[str]]:
+        return {"layout": "hashtag", "prefix": self.prefix, "tenant": self.tenant}
 
     def __repr__(self) -> str:
         return f"HashTagKeys(prefix={self.prefix!r}, tenant={self.tenant!r})"

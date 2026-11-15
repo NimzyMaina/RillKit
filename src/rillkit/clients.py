@@ -117,6 +117,8 @@ CLIENT_ERRORS = _exception_classes(
 RESPONSE_ERRORS = _exception_classes("ResponseError")
 # The server could not be reached or did not answer in time.
 CONNECTION_ERRORS = _exception_classes("ConnectionError", "TimeoutError")
+# A WATCHed key changed before EXEC, so the transaction was not applied.
+WATCH_ERRORS = _exception_classes("WatchError")
 # The cluster topology changed under a command, so it may succeed once the slots are reloaded.
 CLUSTER_REDIRECT_ERRORS = _exception_classes(
     "MovedError", "AskError", "TryAgainError", "ClusterDownError"
@@ -230,6 +232,13 @@ def _cluster_client(lib: Backend, settings: "Settings", options: dict[str, Any])
 
 def is_cluster(client: Client) -> bool:
     return hasattr(client, "nodes_manager") and hasattr(client, "get_node_from_key")
+
+
+def node_client_for(client: Client, key: str) -> Client:
+    """A client for the server that holds ``key``: ``client`` itself outside a cluster."""
+    if not is_cluster(client):
+        return client
+    return _node_client(client.get_node_from_key(key))
 
 
 def _node_client(node: Any) -> Client:

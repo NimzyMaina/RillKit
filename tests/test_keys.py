@@ -133,3 +133,120 @@ def test_prefix_and_tenant_validation():
 
 def test_glob_escape():
     assert glob_escape("a*b?[c]\\") == "a\\*b\\?\\[c\\]\\\\"
+
+
+# control-plane keys (spec section 4)
+
+
+def _control_keys(keys, s, group="billing", node="worker-node-01"):
+    return {
+        "state_global": keys.state_global(),
+        "state_stream": keys.state_stream(s, group),
+        "state_node": keys.state_node(node),
+        "dedup": keys.dedup("dir_99812"),
+        "node": keys.node(node),
+        "nodes": keys.nodes(),
+        "broadcast": keys.broadcast_channel(),
+        "node_channel": keys.node_channel(node),
+    }
+
+
+def test_control_keys_match_the_spec_tables():
+    s = Stream("orders")
+    plain = PlainKeys()
+    assert _control_keys(plain, s) == {
+        "state_global": "rillkit:state:global",
+        "state_stream": "rillkit:state:stream:orders:billing",
+        "state_node": "rillkit:state:node:worker-node-01",
+        "dedup": "rillkit:dedup:dir_99812",
+        "node": "rillkit:nodes:worker-node-01",
+        "nodes": "rillkit:nodes",
+        "broadcast": "rillkit:ctl:broadcast",
+        "node_channel": "rillkit:ctl:node:worker-node-01",
+    }
+    assert plain.logs(s, "1794669071538-1") == "rillkit:logs:orders:1794669071538-1"
+    assert plain.cordon(s) == "rillkit:cordon:orders"
+    assert plain.cordon_buffer(s) == "rillkit:cordon:orders:buffer"
+
+    shop = HashTagKeys(prefix="shop", tenant="t-42")
+    assert _control_keys(shop, s) == {
+        "state_global": "shop:{t-42:}:state:global",
+        "state_stream": "shop:{t-42:}:state:stream:orders:billing",
+        "state_node": "shop:{t-42:}:state:node:worker-node-01",
+        "dedup": "shop:{t-42:}:dedup:dir_99812",
+        "node": "shop:{t-42:}:nodes:worker-node-01",
+        "nodes": "shop:{t-42:}:nodes",
+        "broadcast": "shop:{t-42:}:ctl:broadcast",
+        "node_channel": "shop:{t-42:}:ctl:node:worker-node-01",
+    }
+    assert shop.logs(s, "1794669071538-1") == "shop:{t-42:orders}:logs:1794669071538-1"
+    assert shop.cordon(s) == "shop:{t-42:orders}:cordon"
+    assert shop.cordon_buffer(s) == "shop:{t-42:orders}:cordon:buffer"
+
+    assert HashTagKeys().state_global() == "rk:{:}:state:global"
+    assert HashTagKeys().node("worker-node-01") == "rk:{:}:nodes:worker-node-01"
+    assert HashTagKeys(prefix="").state_global() == "{:}:state:global"
+
+
+def test_stream_names_are_encoded_in_control_keys():
+    assert PlainKeys().state_stream(Stream("a:b"), "c") != PlainKeys().state_stream(
+        Stream("a"), "b:c")
+    assert PlainKeys().cordon(Stream("a:buffer")) != PlainKeys().cordon_buffer(Stream("a"))
+    assert HashTagKeys().state_stream(Stream("a:b"), "c") == "rk:{:}:state:stream:a%3Ab:c"
+    with pytest.raises(ConfigurationError):
+        HashTagKeys().state_stream(Stream(""), "g")
+
+
+@pytest.mark.parametrize("tenant", [None, "t-42", "a:b", "{x}"])
+def test_control_keys_share_one_slot_per_namespace(tenant):
+    keys = HashTagKeys(tenant=tenant)
+    names = set(_control_keys(keys, Stream("orders:eu}")).values())
+    names |= set(_control_keys(keys, Stream("x"), "g2", "node{7}").values())
+    assert len({slot(k) for k in names}) == 1
+
+
+@pytest.mark.parametrize("name", ["orders", "a}b", "x:y", "100%"])
+def test_logs_and_cordon_keys_share_the_stream_slot(name):
+    keys = HashTagKeys(tenant="t-1")
+    s = Stream(name)
+    assert len({slot(keys.stream(s)), slot(keys.logs(s, "1-0")), slot(keys.cordon(s)),
+                slot(keys.cordon_buffer(s))}) == 1
+
+
+def test_control_and_data_keys_never_collide():
+    import itertools
+
+    parts = ["a", ":", "a:b", "%", "{", "}", "state", "nodes", "global"]
+    seen: dict = {}
+    for prefix, tenant in itertools.product(["rk", "", "x"], [None, "a", "a:b", ":"]):
+        keys = HashTagKeys(prefix=prefix, tenant=tenant)
+        for name in parts:
+            s = Stream(name, dlq="d")
+            found = {
+                "stream": keys.stream(s), "dlq": keys.dlq(s), "hb": keys.heartbeat(s, "g", "c"),
+                "done": keys.idempotency(s, "k"), "consumers": keys.consumers(s, "g"),
+                "logs": keys.logs(s, "1-0"), "cordon": keys.cordon(s),
+                "buffer": keys.cordon_buffer(s),
+                **{f"ctl-{k}": v for k, v in _control_keys(keys, s, "g", "n").items()},
+            }
+            for kind, key in found.items():
+                owner = (prefix, tenant, None if kind.startswith("ctl-") and kind not in (
+                    "ctl-state_stream",) else name, kind)
+                assert seen.setdefault(key, owner) == owner, key
+    plain = PlainKeys()
+    names = [plain.stream(Stream(n)) for n in ("orders",)]
+    assert not set(names) & set(_control_keys(plain, Stream("orders")).values())
+
+
+def test_custom_builders_get_plain_control_keys():
+    from rillkit import KeyBuilder
+
+    class Mine(KeyBuilder):
+        def stream(self, stream):
+            return f"x:{stream.name}"
+
+    assert Mine().state_global() == "rillkit:state:global"
+    assert Mine().describe() == {"layout": "custom", "prefix": None, "tenant": None}
+    assert PlainKeys().describe()["layout"] == "plain"
+    assert HashTagKeys(tenant="t").describe() == {
+        "layout": "hashtag", "prefix": "rk", "tenant": "t"}

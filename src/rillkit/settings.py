@@ -6,6 +6,7 @@ from typing import Any, Optional, Union
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from .clients import BACKENDS, MODES, Client, create_client, parse_node
+from .config import config_path, load_config
 from .exceptions import ConfigurationError
 from .keys import KEY_LAYOUTS, HashTagKeys, KeyBuilder, PlainKeys, key_builder
 
@@ -51,8 +52,13 @@ class Settings:
 
     ``Settings.from_env()`` reads RILLKIT_URL, or RILLKIT_HOST/PORT/DB/USERNAME/PASSWORD/SSL,
     plus RILLKIT_SOCKET_TIMEOUT (seconds, or ``none``), RILLKIT_BACKEND, RILLKIT_MODE,
-    RILLKIT_CLUSTER_NODES and RILLKIT_KEY_LAYOUT. Each connection variable falls back to its
-    REDIS_ name (REDIS_URL, REDIS_HOST, ...), so 0.1 configurations keep working.
+    RILLKIT_CLUSTER_NODES, RILLKIT_KEY_LAYOUT, RILLKIT_KEY_PREFIX and RILLKIT_TENANT. Each
+    connection variable falls back to its REDIS_ name (REDIS_URL, REDIS_HOST, ...), so 0.1
+    configurations keep working. A config file (``config=`` or RILLKIT_CONFIG) fills in whatever
+    the environment does not set.
+
+    ``tenant`` (and ``key_prefix``) imply hash-tagged keys, ``HashTagKeys(prefix, tenant)`` with
+    the default prefix ``rk``; combining either with ``key_layout="plain"`` is an error.
 
     ``socket_timeout`` is set explicitly because consumers block in ``XREADGROUP`` for up to
     ``block_ms`` and the client must wait longer than that. redis-py 8 changed its own default to
@@ -75,6 +81,8 @@ class Settings:
     cluster_nodes: Sequence[Union[str, tuple[str, int]]] = ()
     key_layout: Optional[str] = None
     client_kwargs: Mapping[str, Any] = field(default_factory=dict)
+    tenant: Optional[str] = None
+    key_prefix: Optional[str] = None
 
     def __post_init__(self) -> None:
         self.backend = self.backend.strip().lower()
@@ -89,6 +97,15 @@ class Settings:
             raise ConfigurationError(
                 f"unknown key_layout {self.key_layout!r}, expected one of {KEY_LAYOUTS}"
             )
+        if self.key_layout == "plain" and (self.tenant is not None or self.key_prefix is not None):
+            what = "tenant" if self.tenant is not None else "key_prefix"
+            raise ConfigurationError(
+                f"{what} needs hash-tagged keys and cannot be combined with key_layout='plain'"
+            )
+        if self.tenant is not None or self.key_prefix is not None:
+            # validates the tenant and prefix now rather than on first use
+            HashTagKeys(prefix="rk" if self.key_prefix is None else self.key_prefix,
+                        tenant=self.tenant)
         if isinstance(self.cluster_nodes, str):
             self.cluster_nodes = _nodes(self.cluster_nodes)
         self.cluster_nodes = tuple(self.cluster_nodes)
@@ -97,7 +114,9 @@ class Settings:
         self.client_kwargs = dict(self.client_kwargs)
 
     @classmethod
-    def from_env(cls, prefix: str = "REDIS_", **overrides: Any) -> "Settings":
+    def from_env(
+        cls, prefix: str = "REDIS_", *, config: Optional[str] = None, **overrides: Any
+    ) -> "Settings":
         """Settings from environment variables. Keyword arguments override what the env says.
 
         Every connection variable has a ``RILLKIT_`` name and an older ``<prefix>`` name
@@ -105,20 +124,35 @@ class Settings:
         ``<prefix>URL``) wins over the separate host, port, db, username, password and ssl
         variables, which are then not read; setting one of their ``RILLKIT_`` names alongside a
         url logs a warning.
+
+        ``config`` (else ``RILLKIT_CONFIG``) names a config file whose ``[connection]`` and
+        ``[keys]`` sections fill in what the environment does not set.
         """
         env = os.environ
+        path = config_path(config)
+        loaded = load_config(path) if path else {}
+        file: dict[str, Any] = {**loaded.get("connection", {}), **loaded.get("keys", {})}
 
         def get(name: str, default: Optional[str] = None) -> Optional[str]:
             value = env.get(f"RILLKIT_{name}")
             if value:
                 return value
-            return env.get(f"{prefix}{name}", default)
+            value = env.get(f"{prefix}{name}")
+            if value is not None:
+                return value
+            field_name = name.lower()
+            if field_name in file:
+                return file[field_name]  # type: ignore[no-any-return]
+            return default
 
         url = get("URL") or None
         if url:
             ignored = [f"RILLKIT_{n}" for n in _URL_REPLACES if env.get(f"RILLKIT_{n}")]
             if ignored:
                 log.warning("%s ignored: a url is set and provides them", ", ".join(ignored))
+        ssl = get("SSL", "")
+        nodes = env.get("RILLKIT_CLUSTER_NODES") or file.get("cluster_nodes")
+        timeout = get("SOCKET_TIMEOUT")
         values: dict[str, Any] = {
             "url": url,
             "host": get("HOST", "localhost"),
@@ -126,12 +160,15 @@ class Settings:
             "db": int(get("DB", "0") or 0),
             "password": None if url else get("PASSWORD"),
             "username": None if url else get("USERNAME"),
-            "ssl": (get("SSL", "") or "").lower() in ("1", "true", "yes"),
-            "socket_timeout": _seconds(get("SOCKET_TIMEOUT"), 15.0),
-            "backend": env.get("RILLKIT_BACKEND") or "redis",
-            "mode": env.get("RILLKIT_MODE") or "standalone",
-            "cluster_nodes": _nodes(env.get("RILLKIT_CLUSTER_NODES")),
-            "key_layout": env.get("RILLKIT_KEY_LAYOUT") or None,
+            "ssl": ssl if isinstance(ssl, bool) else (ssl or "").lower() in ("1", "true", "yes"),
+            "socket_timeout": (timeout if isinstance(timeout, (int, float))
+                               else _seconds(timeout, 15.0)),
+            "backend": env.get("RILLKIT_BACKEND") or file.get("backend") or "redis",
+            "mode": env.get("RILLKIT_MODE") or file.get("mode") or "standalone",
+            "cluster_nodes": nodes if isinstance(nodes, (list, tuple)) else _nodes(nodes),
+            "key_layout": env.get("RILLKIT_KEY_LAYOUT") or file.get("key_layout") or None,
+            "key_prefix": env.get("RILLKIT_KEY_PREFIX") or file.get("key_prefix"),
+            "tenant": env.get("RILLKIT_TENANT") or file.get("tenant") or None,
         }
         values.update(overrides)
         return cls(**values)
@@ -141,8 +178,17 @@ class Settings:
         ``valkey.ValkeyCluster``, depending on ``backend`` and ``mode``."""
         return create_client(self)
 
+    @property
+    def has_key_settings(self) -> bool:
+        """Whether any field picks the key layout (``key_layout``, ``tenant``, ``key_prefix``)."""
+        return any(v is not None for v in (self.key_layout, self.tenant, self.key_prefix))
+
     def key_builder(self) -> KeyBuilder:
-        """``key_layout`` if set, otherwise plain keys standalone and hash-tagged on a cluster."""
+        """``HashTagKeys(key_prefix, tenant)`` if either is set, else ``key_layout`` if set,
+        otherwise plain keys standalone and hash-tagged on a cluster."""
+        if self.tenant is not None or self.key_prefix is not None:
+            prefix = "rk" if self.key_prefix is None else self.key_prefix
+            return HashTagKeys(prefix=prefix, tenant=self.tenant)
         if self.key_layout is not None:
             return key_builder(self.key_layout)
         return HashTagKeys() if self.mode == "cluster" else PlainKeys()
