@@ -51,6 +51,7 @@ DEDUP_TTL = 60
 MAX_CONCURRENCY = 256
 MAX_BLOCK_MS = 600_000
 MAX_BATCH_SIZE = 10_000
+MAX_REPLAY_COUNT = 100_000
 # the tunable settings and the largest value each accepts
 TUNABLES = {"concurrency": MAX_CONCURRENCY, "block_ms": MAX_BLOCK_MS, "batch_size": MAX_BATCH_SIZE}
 
@@ -69,18 +70,140 @@ class DirectiveError(ValueError):
     """The directive is malformed or names something that does not exist."""
 
 
-def _positive(value: Any, name: str, top: int) -> int:
-    try:
+def _positive(value: Any, name: str, top: int, strings: bool = False) -> int:
+    """``value`` as an integer from 1 to ``top``. Directive parameters must be JSON integers;
+    with ``strings`` (values read from a state hash) a string of ASCII digits is accepted too.
+    Booleans, floats and anything else are refused rather than converted."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        number = value
+    elif strings and isinstance(value, str) and value.isascii() and value.isdigit():
         number = int(value)
-    except (TypeError, ValueError) as e:
-        raise DirectiveError(f"{name} must be an integer") from e
-    if isinstance(value, bool) or not 1 <= number <= top:
+    else:
+        raise DirectiveError(f"{name} must be an integer")
+    if not 1 <= number <= top:
         raise DirectiveError(f"{name} must be between 1 and {top}")
     return number
 
 
 def _sub_suffix(stream: str, group: str) -> str:
     return f":{_escape_plain(stream)}:{group}"
+
+
+def plan_directive(keys: Any, directive: Any) -> dict[str, Any]:
+    """Validate a directive and work out what applying it writes, without touching a server.
+
+    Returns ``cmd`` and, for state commands, the state ``key``, the wakeup ``channel`` and the
+    hash ``fields`` to write; for ``EXECUTE_REPLAY``, the ``stream``, ``group`` and ``params``.
+    Raises ``DirectiveError`` for a malformed directive. ``keys`` is the key builder."""
+    if not isinstance(directive, Mapping):
+        raise DirectiveError("a directive must be a JSON object")
+    directive_id = directive.get("directive_id")
+    if not directive_id or not isinstance(directive_id, str):
+        raise DirectiveError("directive_id is required")
+    if directive.get("type", "DIRECTIVE") != "DIRECTIVE":
+        raise DirectiveError("type must be DIRECTIVE")
+    cmd = directive.get("cmd")
+    if cmd not in COMMANDS:
+        raise DirectiveError(f"unknown cmd {cmd!r}, expected one of {COMMANDS}")
+    scope = directive.get("scope", "global")
+    if scope not in SCOPES:
+        raise DirectiveError(f"unknown scope {scope!r}, expected one of {SCOPES}")
+    target = directive.get("target") or {}
+    params = directive.get("params") or {}
+    if not isinstance(target, Mapping) or not isinstance(params, Mapping):
+        raise DirectiveError("target and params must be objects")
+    stream, group = target.get("stream"), target.get("group")
+    node_id = target.get("node_id")
+    if (stream is None) != (group is None):
+        raise DirectiveError("target needs both stream and group, or neither")
+    for name, value in (("stream", stream), ("group", group), ("node_id", node_id)):
+        if value is not None and (not isinstance(value, str) or not value):
+            raise DirectiveError(f"target.{name} must be a non-empty string")
+
+    if cmd == "EXECUTE_REPLAY":
+        if not stream:
+            raise DirectiveError("EXECUTE_REPLAY needs target.stream and target.group")
+        if params.get("set_id") is not None:
+            if not isinstance(params["set_id"], str) or not params["set_id"]:
+                raise DirectiveError("set_id must be a non-empty string")
+            replay: dict[str, Any] = {"set_id": params["set_id"]}
+        else:
+            replay = {"count": _positive(params.get("count", 100), "count", MAX_REPLAY_COUNT)}
+        return {"cmd": cmd, "stream": stream, "group": group, "replay": replay}
+
+    fields: dict[str, str] = {}
+    if cmd in ("SET_STATE", "MAINTENANCE_ON", "MAINTENANCE_OFF"):
+        state = {"MAINTENANCE_ON": "MAINTENANCE", "MAINTENANCE_OFF": "RUNNING"}.get(
+            cmd, params.get("state"))
+        if state not in STATES:
+            raise DirectiveError(f"state must be one of {STATES}")
+        fields["state"] = state
+    if cmd == "SET_CONCURRENCY":
+        fields["concurrency"] = str(_positive(params.get("concurrency"), "concurrency",
+                                              MAX_CONCURRENCY))
+    if cmd in ("SET_CONCURRENCY", "SET_POLL_CONFIG"):
+        block = params.get("block_ms", params.get("poll_ms"))
+        if block is not None:
+            fields["block_ms"] = str(_positive(block, "block_ms", MAX_BLOCK_MS))
+        if params.get("batch_size") is not None:
+            fields["batch_size"] = str(_positive(params["batch_size"], "batch_size",
+                                                     MAX_BATCH_SIZE))
+        if cmd == "SET_POLL_CONFIG" and not fields:
+            raise DirectiveError("SET_POLL_CONFIG needs block_ms (or poll_ms) or batch_size")
+
+    if scope == "global":
+        key, channel = keys.state_global(), keys.broadcast_channel()
+    elif scope == "stream":
+        if not stream:
+            raise DirectiveError("scope 'stream' needs target.stream and target.group")
+        key = keys.state_stream(Stream(stream), group)
+        channel = keys.broadcast_channel()
+    else:
+        if not node_id:
+            raise DirectiveError("scope 'node' needs target.node_id")
+        key, channel = keys.state_node(node_id), keys.node_channel(node_id)
+        if stream and group:
+            suffix = _sub_suffix(stream, group)
+            fields = {f"{name}{suffix}": value for name, value in fields.items()}
+    return {"cmd": cmd, "key": key, "channel": channel, "fields": fields,
+            "target": {"stream": stream, "group": group}}
+
+
+def resolve_desired(
+    global_state: Optional[Mapping[str, str]],
+    stream_state: Optional[Mapping[str, str]],
+    node_state: Optional[Mapping[str, str]],
+    subscription: Optional[tuple[str, str]] = None,
+) -> Desired:
+    """Combine the state hashes that apply to one subscription (``(stream, group)``), or to the
+    node as a whole without one.
+
+    The most restrictive ``state`` across all of them wins. For each tunable the most specific
+    valid value wins: a node field for this subscription (``<field>:<stream>:<group>``), then a
+    plain node field, then the stream's, then the global one. Invalid values are ignored."""
+    node = dict(node_state or {})
+    layers = [dict(global_state or {})]
+    if subscription is not None:
+        layers.append(dict(stream_state or {}))
+    layers.append(node)
+    if subscription is not None:
+        suffix = _sub_suffix(*subscription)
+        layers.append({
+            name[: -len(suffix)]: value for name, value in node.items() if name.endswith(suffix)
+        })
+    state = "RUNNING"
+    values: dict[str, Optional[int]] = dict.fromkeys(TUNABLES)
+    for layer in layers:
+        wanted = layer.get("state", "RUNNING")
+        if wanted in _RANK and _RANK[wanted] > _RANK[state]:
+            state = wanted
+        for name, top in TUNABLES.items():
+            if name in layer:
+                try:
+                    values[name] = _positive(layer[name], name, top, strings=True)
+                except DirectiveError:
+                    log.warning("ignoring invalid %s=%r in the desired state", name, layer[name])
+    return Desired(state, values["concurrency"], values["block_ms"], values["batch_size"])
 
 
 class ControlPlane:
@@ -139,38 +262,17 @@ class ControlPlane:
             self.wake()
         return changed
 
-    def _layers(self, sub: Optional[Subscriber]) -> list[dict[str, str]]:
-        """The state hashes for ``sub`` (or the node as a whole), least specific first."""
-        node = self._hashes.get(self.keys.state_node(self.node_id), {})
-        layers = [self._hashes.get(self.keys.state_global(), {})]
-        if sub is None:
-            return [*layers, node]
-        layers.append(self._hashes.get(self.keys.state_stream(sub.stream, sub.group), {}))
-        layers.append(node)
-        suffix = _sub_suffix(sub.stream.name, sub.group)
-        layers.append({
-            name[: -len(suffix)]: value for name, value in node.items() if name.endswith(suffix)
-        })
-        return layers
-
     def desired(self, sub: Optional[Subscriber] = None) -> Desired:
         """What ``sub`` (or, without one, the node) should do now, from the last hydrate."""
         with self._cond:
-            layers = self._layers(sub)
-        state = "RUNNING"
-        values: dict[str, Optional[int]] = dict.fromkeys(TUNABLES)
-        for layer in layers:
-            wanted = layer.get("state", "RUNNING").upper()
-            if wanted in _RANK and _RANK[wanted] > _RANK[state]:
-                state = wanted
-            for name, top in TUNABLES.items():
-                if name in layer:
-                    try:
-                        values[name] = _positive(layer[name], name, top)
-                    except DirectiveError:
-                        log.warning("ignoring invalid %s=%r in the desired state", name,
-                                    layer[name])
-        return Desired(state, values["concurrency"], values["block_ms"], values["batch_size"])
+            hashes = self._hashes
+        stream = None if sub is None else hashes.get(self.keys.state_stream(sub.stream, sub.group))
+        return resolve_desired(
+            hashes.get(self.keys.state_global()),
+            stream,
+            hashes.get(self.keys.state_node(self.node_id)),
+            None if sub is None else (sub.stream.name, sub.group),
+        )
 
     def wait(self, version: int, timeout: float) -> None:
         """Block until the desired state changes from ``version``, ``wake()`` or ``timeout``."""
@@ -381,12 +483,9 @@ class ControlPlane:
         try:
             if isinstance(directive, (str, bytes)):
                 directive = json.loads(directive)
-            if not isinstance(directive, Mapping):
-                raise DirectiveError("a directive must be a JSON object")
-            directive_id = directive.get("directive_id")
-            if not directive_id or not isinstance(directive_id, str):
-                raise DirectiveError("directive_id is required")
-            plan = self._plan(directive)
+            if isinstance(directive, Mapping) and isinstance(directive.get("directive_id"), str):
+                directive_id = directive["directive_id"]
+            plan = plan_directive(self.keys, directive)
         except (DirectiveError, ValueError) as e:
             return self._ack(directive_id, "REJECTED", error=str(e))
         try:
@@ -410,69 +509,6 @@ class ControlPlane:
             log.warning("directive %s applied, but re-reading the state failed: %s",
                         directive_id, e)
         return self._ack(directive_id, "APPLIED", target=plan["target"])
-
-    def _plan(self, directive: Mapping[str, Any]) -> dict[str, Any]:
-        if directive.get("type", "DIRECTIVE") != "DIRECTIVE":
-            raise DirectiveError("type must be DIRECTIVE")
-        cmd = str(directive.get("cmd", "")).upper()
-        if cmd not in COMMANDS:
-            raise DirectiveError(f"unknown cmd {cmd!r}, expected one of {COMMANDS}")
-        scope = str(directive.get("scope", "global")).lower()
-        if scope not in SCOPES:
-            raise DirectiveError(f"unknown scope {scope!r}, expected one of {SCOPES}")
-        target = directive.get("target") or {}
-        params = directive.get("params") or {}
-        if not isinstance(target, Mapping) or not isinstance(params, Mapping):
-            raise DirectiveError("target and params must be objects")
-        stream, group = target.get("stream"), target.get("group")
-        node_id = target.get("node_id")
-        if (stream is None) != (group is None):
-            raise DirectiveError("target needs both stream and group, or neither")
-        for name, value in (("stream", stream), ("group", group), ("node_id", node_id)):
-            if value is not None and (not isinstance(value, str) or not value):
-                raise DirectiveError(f"target.{name} must be a non-empty string")
-
-        if cmd == "EXECUTE_REPLAY":
-            if not stream:
-                raise DirectiveError("EXECUTE_REPLAY needs target.stream and target.group")
-            return {"cmd": cmd, "stream": stream, "group": group, "params": params}
-
-        fields: dict[str, str] = {}
-        if cmd in ("SET_STATE", "MAINTENANCE_ON", "MAINTENANCE_OFF"):
-            state = {"MAINTENANCE_ON": "MAINTENANCE", "MAINTENANCE_OFF": "RUNNING"}.get(
-                cmd, str(params.get("state", "")).upper())
-            if state not in STATES:
-                raise DirectiveError(f"state must be one of {STATES}")
-            fields["state"] = state
-        if cmd == "SET_CONCURRENCY":
-            fields["concurrency"] = str(_positive(params.get("concurrency"), "concurrency",
-                                                  MAX_CONCURRENCY))
-        if cmd in ("SET_CONCURRENCY", "SET_POLL_CONFIG"):
-            block = params.get("block_ms", params.get("poll_ms"))
-            if block is not None:
-                fields["block_ms"] = str(_positive(block, "block_ms", MAX_BLOCK_MS))
-            if params.get("batch_size") is not None:
-                fields["batch_size"] = str(_positive(params["batch_size"], "batch_size",
-                                                         MAX_BATCH_SIZE))
-            if cmd == "SET_POLL_CONFIG" and not fields:
-                raise DirectiveError("SET_POLL_CONFIG needs block_ms (or poll_ms) or batch_size")
-
-        if scope == "global":
-            key, channel = self.keys.state_global(), self.keys.broadcast_channel()
-        elif scope == "stream":
-            if not stream:
-                raise DirectiveError("scope 'stream' needs target.stream and target.group")
-            key = self.keys.state_stream(Stream(stream), group)
-            channel = self.keys.broadcast_channel()
-        else:
-            if not node_id:
-                raise DirectiveError("scope 'node' needs target.node_id")
-            key, channel = self.keys.state_node(node_id), self.keys.node_channel(node_id)
-            if stream and group:
-                suffix = _sub_suffix(stream, group)
-                fields = {f"{name}{suffix}": value for name, value in fields.items()}
-        return {"cmd": cmd, "key": key, "channel": channel, "fields": fields,
-                "target": {"stream": stream, "group": group}}
 
     def _write_state(self, dedup: str, key: str, fields: Mapping[str, str]) -> bool:
         """Record the directive id and write the state, once. False if already applied.
@@ -509,12 +545,11 @@ class ControlPlane:
 
     def _replay(self, plan: Mapping[str, Any]) -> dict[str, Any]:
         stream = self._stream(plan["stream"], plan["group"])
-        params = plan["params"]
-        if params.get("set_id") is not None:
-            self.client.xgroup_setid(self.keys.stream(stream), plan["group"], str(params["set_id"]))
-            return {"set_id": str(params["set_id"])}
-        count = _positive(params.get("count", 100), "count", 100_000)
-        return {"replayed": self.broker.replay_dlq(stream, count=count)}
+        replay = plan["replay"]
+        if "set_id" in replay:
+            self.client.xgroup_setid(self.keys.stream(stream), plan["group"], replay["set_id"])
+            return {"set_id": replay["set_id"]}
+        return {"replayed": self.broker.replay_dlq(stream, count=replay["count"])}
 
     def _stream(self, name: str, group: str) -> Stream:
         """The subscribed ``Stream`` (with its DLQ name) for ``name`` and ``group``, if any."""

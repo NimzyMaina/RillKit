@@ -49,10 +49,13 @@ def new_span_id() -> str:
 
 
 def parse_traceparent(value: Optional[str]) -> Optional[SpanContext]:
-    """The span a ``traceparent`` header names, or None if it is missing or invalid."""
+    """The span a ``traceparent`` header names, or None if it is missing or invalid.
+
+    Strict, as the W3C spec asks: lowercase hex only, no surrounding whitespace, and version
+    ``00`` with nothing after the flags. A later version may append ``-...`` fields."""
     if not value:
         return None
-    match = _HEADER.match(value.strip().lower())
+    match = _HEADER.match(value)  # W3C: lowercase hex, nothing around it
     if match is None:
         return None
     version, trace_id, span_id, flags, rest = match.groups()

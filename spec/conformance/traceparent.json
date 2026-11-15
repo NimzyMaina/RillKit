@@ -1,0 +1,65 @@
+{
+  "description": "Parsing W3C traceparent values read from stream entries. null: invalid, start a new trace.",
+  "cases": [
+    {
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "expect": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "span_id": "00f067aa0ba902b7",
+        "flags": "01"
+      }
+    },
+    {
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00",
+      "expect": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "span_id": "00f067aa0ba902b7",
+        "flags": "00"
+      }
+    },
+    {
+      "traceparent": "00-4BF92F3577B34DA6A3CE929D0E0E4736-00F067AA0BA902B7-01",
+      "expect": null
+    },
+    {
+      "traceparent": " 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 ",
+      "expect": null
+    },
+    {
+      "traceparent": "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-future",
+      "expect": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "span_id": "00f067aa0ba902b7",
+        "flags": "01"
+      }
+    },
+    {
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra",
+      "expect": null
+    },
+    {
+      "traceparent": "ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "expect": null
+    },
+    {
+      "traceparent": "00-00000000000000000000000000000000-00f067aa0ba902b7-01",
+      "expect": null
+    },
+    {
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01",
+      "expect": null
+    },
+    {
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e473-00f067aa0ba902b7-01",
+      "expect": null
+    },
+    {
+      "traceparent": "00-xyz-00f067aa0ba902b7-01",
+      "expect": null
+    },
+    {
+      "traceparent": "",
+      "expect": null
+    }
+  ]
+}

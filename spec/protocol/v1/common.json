@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/common.json",
+  "title": "Shared definitions of the RillKit protocol, version 1",
+  "$defs": {
+    "state": {
+      "description": "A worker state (spec 2.2). Exact case.",
+      "enum": ["RUNNING", "PAUSED", "MAINTENANCE", "DRAINING"]
+    },
+    "nonEmptyString": {"type": "string", "minLength": 1},
+    "keys": {
+      "description": "The node's key builder (spec 4, 5.1). prefix and tenant are null for plain and custom layouts.",
+      "type": "object",
+      "required": ["layout", "prefix", "tenant"],
+      "additionalProperties": false,
+      "properties": {
+        "layout": {"enum": ["plain", "hashtag", "custom"]},
+        "prefix": {"type": ["string", "null"]},
+        "tenant": {"type": ["string", "null"], "minLength": 1}
+      }
+    }
+  }
+}

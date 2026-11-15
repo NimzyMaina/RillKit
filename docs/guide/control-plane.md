@@ -80,6 +80,8 @@ ack = broker.control.apply({
 
 `scope` is `global`, `stream` (with `target.stream` and `target.group`) or `node` (with `target.node_id`, and optionally a stream and group).
 
+Directives are checked strictly, the same way in every RillKit SDK: commands, scopes and states are exact-case, and numbers must be JSON integers (`2.5`, `"12"` and `true` are rejected, not converted). The JSON Schemas and conformance vectors that define this are in the repository's [`spec/`](https://github.com/NimzyMaina/RillKit/tree/main/spec) directory.
+
 Any node can apply any directive. It is stored in the matching state key, and a wakeup is published on the broadcast channel (or the target node's channel); every node it concerns re-reads its state immediately. Each worker also re-reads every `refresh_interval` seconds (default 30), in case a wakeup was lost.
 
 **Each directive is applied once.** Its id is recorded for 60 seconds; applying it again returns status `DUPLICATE`. When the dedup key and the state key share a slot (always on a single server, and with `HashTagKeys`), the check and the write are one transaction. A malformed directive returns `REJECTED`, an error while applying it `FAILED`, both with an `error`.

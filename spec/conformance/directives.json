@@ -1,0 +1,1540 @@
+{
+  "description": "Validating directives and what applying one writes (spec 2.1, 5.2). 'fields' are the planned state fields; applying also writes 'directive_id' and 'updated_at'. 'reason' is informative, not compared.",
+  "cases": [
+    {
+      "name": "SET_STATE globally",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_STATE",
+        "key": "rillkit:state:global",
+        "channel": "rillkit:ctl:broadcast",
+        "fields": {
+          "state": "PAUSED"
+        }
+      }
+    },
+    {
+      "name": "states are case-sensitive",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "draining"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "state must be one of ('RUNNING', 'PAUSED', 'MAINTENANCE', 'DRAINING')"
+      }
+    },
+    {
+      "name": "commands are case-sensitive",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "set_state",
+        "scope": "global",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown cmd 'set_state', expected one of ('SET_STATE', 'SET_CONCURRENCY', 'SET_POLL_CONFIG', 'MAINTENANCE_ON', 'MAINTENANCE_OFF', 'EXECUTE_REPLAY')"
+      }
+    },
+    {
+      "name": "scopes are case-sensitive",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "GLOBAL",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown scope 'GLOBAL', expected one of ('global', 'stream', 'node')"
+      }
+    },
+    {
+      "name": "MAINTENANCE_ON for one stream",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "MAINTENANCE_ON",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "MAINTENANCE_ON",
+        "key": "rillkit:state:stream:orders%3Aeu:billing",
+        "channel": "rillkit:ctl:broadcast",
+        "fields": {
+          "state": "MAINTENANCE"
+        }
+      }
+    },
+    {
+      "name": "MAINTENANCE_OFF",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "MAINTENANCE_OFF",
+        "scope": "global"
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "MAINTENANCE_OFF",
+        "key": "rillkit:state:global",
+        "channel": "rillkit:ctl:broadcast",
+        "fields": {
+          "state": "RUNNING"
+        }
+      }
+    },
+    {
+      "name": "SET_CONCURRENCY with poll settings; poll_ms is an alias of block_ms",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "concurrency": 12,
+          "batch_size": 25,
+          "poll_ms": 200
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_CONCURRENCY",
+        "key": "rillkit:state:stream:orders%3Aeu:billing",
+        "channel": "rillkit:ctl:broadcast",
+        "fields": {
+          "concurrency": "12",
+          "block_ms": "200",
+          "batch_size": "25"
+        }
+      }
+    },
+    {
+      "name": "SET_CONCURRENCY for a node",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "node",
+        "target": {
+          "node_id": "worker-node-01"
+        },
+        "params": {
+          "concurrency": 2
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_CONCURRENCY",
+        "key": "rillkit:state:node:worker-node-01",
+        "channel": "rillkit:ctl:node:worker-node-01",
+        "fields": {
+          "concurrency": "2"
+        }
+      }
+    },
+    {
+      "name": "SET_CONCURRENCY for one subscription on a node",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "node",
+        "target": {
+          "node_id": "worker-node-01",
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "concurrency": 2
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_CONCURRENCY",
+        "key": "rillkit:state:node:worker-node-01",
+        "channel": "rillkit:ctl:node:worker-node-01",
+        "fields": {
+          "concurrency:orders%3Aeu:billing": "2"
+        }
+      }
+    },
+    {
+      "name": "SET_POLL_CONFIG",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_POLL_CONFIG",
+        "scope": "global",
+        "params": {
+          "block_ms": 300,
+          "batch_size": 7
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_POLL_CONFIG",
+        "key": "rillkit:state:global",
+        "channel": "rillkit:ctl:broadcast",
+        "fields": {
+          "block_ms": "300",
+          "batch_size": "7"
+        }
+      }
+    },
+    {
+      "name": "scope defaults to global",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "d",
+        "cmd": "SET_STATE",
+        "params": {
+          "state": "RUNNING"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_STATE",
+        "key": "rillkit:state:global",
+        "channel": "rillkit:ctl:broadcast",
+        "fields": {
+          "state": "RUNNING"
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY from the DLQ",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 10
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "replay": {
+          "count": 10
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY by moving the group",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "set_id": "0"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "replay": {
+          "set_id": "0"
+        }
+      }
+    },
+    {
+      "name": "unknown state",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "ASLEEP"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "state must be one of ('RUNNING', 'PAUSED', 'MAINTENANCE', 'DRAINING')"
+      }
+    },
+    {
+      "name": "unknown cmd",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "REBOOT",
+        "scope": "global"
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown cmd 'REBOOT', expected one of ('SET_STATE', 'SET_CONCURRENCY', 'SET_POLL_CONFIG', 'MAINTENANCE_ON', 'MAINTENANCE_OFF', 'EXECUTE_REPLAY')"
+      }
+    },
+    {
+      "name": "unknown scope",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "galaxy",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown scope 'galaxy', expected one of ('global', 'stream', 'node')"
+      }
+    },
+    {
+      "name": "concurrency below 1",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": 0
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be between 1 and 256"
+      }
+    },
+    {
+      "name": "concurrency above 256",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": 257
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be between 1 and 256"
+      }
+    },
+    {
+      "name": "concurrency not an integer",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": "many"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "concurrency true is not an integer",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": true
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "concurrency 2.5 is not an integer",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": 2.5
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "concurrency as a string is not an integer",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": "12"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "block_ms above 600000",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_POLL_CONFIG",
+        "scope": "global",
+        "params": {
+          "block_ms": 600001
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "block_ms must be between 1 and 600000"
+      }
+    },
+    {
+      "name": "SET_POLL_CONFIG with nothing to set",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_POLL_CONFIG",
+        "scope": "global",
+        "params": {}
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "SET_POLL_CONFIG needs block_ms (or poll_ms) or batch_size"
+      }
+    },
+    {
+      "name": "node scope without node_id",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "node",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "scope 'node' needs target.node_id"
+      }
+    },
+    {
+      "name": "stream scope without a stream",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "stream",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "scope 'stream' needs target.stream and target.group"
+      }
+    },
+    {
+      "name": "a stream without a group",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "stream",
+        "target": {
+          "stream": "s"
+        },
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "target needs both stream and group, or neither"
+      }
+    },
+    {
+      "name": "an empty stream name",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "stream",
+        "target": {
+          "stream": "",
+          "group": "g"
+        },
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "target.stream must be a non-empty string"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY without a target",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "global"
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "EXECUTE_REPLAY needs target.stream and target.group"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY count above 100000",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 100001
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "count must be between 1 and 100000"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY count defaults to 100",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "replay": {
+          "count": 100
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY set_id must be a string",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "set_id": 0
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "set_id must be a non-empty string"
+      }
+    },
+    {
+      "name": "missing directive_id",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "cmd": "SET_STATE",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "directive_id is required"
+      }
+    },
+    {
+      "name": "wrong type",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "TELEMETRY_REPORT",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "type must be DIRECTIVE"
+      }
+    },
+    {
+      "name": "target is not an object",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "target": "x",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "target and params must be objects"
+      }
+    },
+    {
+      "name": "SET_STATE globally",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_STATE",
+        "key": "rk:{t-42:}:state:global",
+        "channel": "rk:{t-42:}:ctl:broadcast",
+        "fields": {
+          "state": "PAUSED"
+        }
+      }
+    },
+    {
+      "name": "states are case-sensitive",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "draining"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "state must be one of ('RUNNING', 'PAUSED', 'MAINTENANCE', 'DRAINING')"
+      }
+    },
+    {
+      "name": "commands are case-sensitive",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "set_state",
+        "scope": "global",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown cmd 'set_state', expected one of ('SET_STATE', 'SET_CONCURRENCY', 'SET_POLL_CONFIG', 'MAINTENANCE_ON', 'MAINTENANCE_OFF', 'EXECUTE_REPLAY')"
+      }
+    },
+    {
+      "name": "scopes are case-sensitive",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "GLOBAL",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown scope 'GLOBAL', expected one of ('global', 'stream', 'node')"
+      }
+    },
+    {
+      "name": "MAINTENANCE_ON for one stream",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "MAINTENANCE_ON",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "MAINTENANCE_ON",
+        "key": "rk:{t-42:}:state:stream:orders%3Aeu:billing",
+        "channel": "rk:{t-42:}:ctl:broadcast",
+        "fields": {
+          "state": "MAINTENANCE"
+        }
+      }
+    },
+    {
+      "name": "MAINTENANCE_OFF",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "MAINTENANCE_OFF",
+        "scope": "global"
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "MAINTENANCE_OFF",
+        "key": "rk:{t-42:}:state:global",
+        "channel": "rk:{t-42:}:ctl:broadcast",
+        "fields": {
+          "state": "RUNNING"
+        }
+      }
+    },
+    {
+      "name": "SET_CONCURRENCY with poll settings; poll_ms is an alias of block_ms",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "concurrency": 12,
+          "batch_size": 25,
+          "poll_ms": 200
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_CONCURRENCY",
+        "key": "rk:{t-42:}:state:stream:orders%3Aeu:billing",
+        "channel": "rk:{t-42:}:ctl:broadcast",
+        "fields": {
+          "concurrency": "12",
+          "block_ms": "200",
+          "batch_size": "25"
+        }
+      }
+    },
+    {
+      "name": "SET_CONCURRENCY for a node",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "node",
+        "target": {
+          "node_id": "worker-node-01"
+        },
+        "params": {
+          "concurrency": 2
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_CONCURRENCY",
+        "key": "rk:{t-42:}:state:node:worker-node-01",
+        "channel": "rk:{t-42:}:ctl:node:worker-node-01",
+        "fields": {
+          "concurrency": "2"
+        }
+      }
+    },
+    {
+      "name": "SET_CONCURRENCY for one subscription on a node",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "node",
+        "target": {
+          "node_id": "worker-node-01",
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "concurrency": 2
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_CONCURRENCY",
+        "key": "rk:{t-42:}:state:node:worker-node-01",
+        "channel": "rk:{t-42:}:ctl:node:worker-node-01",
+        "fields": {
+          "concurrency:orders%3Aeu:billing": "2"
+        }
+      }
+    },
+    {
+      "name": "SET_POLL_CONFIG",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_POLL_CONFIG",
+        "scope": "global",
+        "params": {
+          "block_ms": 300,
+          "batch_size": 7
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_POLL_CONFIG",
+        "key": "rk:{t-42:}:state:global",
+        "channel": "rk:{t-42:}:ctl:broadcast",
+        "fields": {
+          "block_ms": "300",
+          "batch_size": "7"
+        }
+      }
+    },
+    {
+      "name": "scope defaults to global",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "d",
+        "cmd": "SET_STATE",
+        "params": {
+          "state": "RUNNING"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "SET_STATE",
+        "key": "rk:{t-42:}:state:global",
+        "channel": "rk:{t-42:}:ctl:broadcast",
+        "fields": {
+          "state": "RUNNING"
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY from the DLQ",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 10
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "replay": {
+          "count": 10
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY by moving the group",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "set_id": "0"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "replay": {
+          "set_id": "0"
+        }
+      }
+    },
+    {
+      "name": "unknown state",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "ASLEEP"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "state must be one of ('RUNNING', 'PAUSED', 'MAINTENANCE', 'DRAINING')"
+      }
+    },
+    {
+      "name": "unknown cmd",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "REBOOT",
+        "scope": "global"
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown cmd 'REBOOT', expected one of ('SET_STATE', 'SET_CONCURRENCY', 'SET_POLL_CONFIG', 'MAINTENANCE_ON', 'MAINTENANCE_OFF', 'EXECUTE_REPLAY')"
+      }
+    },
+    {
+      "name": "unknown scope",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "galaxy",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "unknown scope 'galaxy', expected one of ('global', 'stream', 'node')"
+      }
+    },
+    {
+      "name": "concurrency below 1",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": 0
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be between 1 and 256"
+      }
+    },
+    {
+      "name": "concurrency above 256",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": 257
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be between 1 and 256"
+      }
+    },
+    {
+      "name": "concurrency not an integer",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": "many"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "concurrency true is not an integer",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": true
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "concurrency 2.5 is not an integer",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": 2.5
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "concurrency as a string is not an integer",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_CONCURRENCY",
+        "scope": "global",
+        "params": {
+          "concurrency": "12"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "concurrency must be an integer"
+      }
+    },
+    {
+      "name": "block_ms above 600000",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_POLL_CONFIG",
+        "scope": "global",
+        "params": {
+          "block_ms": 600001
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "block_ms must be between 1 and 600000"
+      }
+    },
+    {
+      "name": "SET_POLL_CONFIG with nothing to set",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_POLL_CONFIG",
+        "scope": "global",
+        "params": {}
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "SET_POLL_CONFIG needs block_ms (or poll_ms) or batch_size"
+      }
+    },
+    {
+      "name": "node scope without node_id",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "node",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "scope 'node' needs target.node_id"
+      }
+    },
+    {
+      "name": "stream scope without a stream",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "stream",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "scope 'stream' needs target.stream and target.group"
+      }
+    },
+    {
+      "name": "a stream without a group",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "stream",
+        "target": {
+          "stream": "s"
+        },
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "target needs both stream and group, or neither"
+      }
+    },
+    {
+      "name": "an empty stream name",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "stream",
+        "target": {
+          "stream": "",
+          "group": "g"
+        },
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "target.stream must be a non-empty string"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY without a target",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "global"
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "EXECUTE_REPLAY needs target.stream and target.group"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY count above 100000",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 100001
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "count must be between 1 and 100000"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY count defaults to 100",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "replay": {
+          "count": 100
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY set_id must be a string",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "set_id": 0
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "set_id must be a non-empty string"
+      }
+    },
+    {
+      "name": "missing directive_id",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "cmd": "SET_STATE",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "directive_id is required"
+      }
+    },
+    {
+      "name": "wrong type",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "TELEMETRY_REPORT",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "type must be DIRECTIVE"
+      }
+    },
+    {
+      "name": "target is not an object",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "SET_STATE",
+        "scope": "global",
+        "target": "x",
+        "params": {
+          "state": "PAUSED"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "target and params must be objects"
+      }
+    }
+  ]
+}

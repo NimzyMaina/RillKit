@@ -1,0 +1,9 @@
+{
+  "type": "DIRECTIVE",
+  "directive_id": "dir_99812",
+  "cmd": "SET_CONCURRENCY",
+  "scope": "node",
+  "target": {"node_id": "worker-node-01", "stream": "orders", "group": "billing"},
+  "params": {"concurrency": 12, "batch_size": 25, "poll_ms": 200},
+  "reason": "AUTOSCALE_LAG_THRESHOLD_EXCEEDED"
+}

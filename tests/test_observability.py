@@ -22,7 +22,7 @@ PARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 @pytest.mark.parametrize("value, ok", [
     (PARENT, True),
-    (PARENT.upper(), True),
+    (PARENT.upper(), False),  # W3C: lowercase hex only
     ("01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra", True),
     ("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra", False),
     ("ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", False),

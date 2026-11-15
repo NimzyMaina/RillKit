@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/directive_ack.json",
+  "title": "DIRECTIVE_ACK: worker to control plane (spec 5.3)",
+  "type": "object",
+  "required": ["type", "directive_id", "node_id", "status", "current_state"],
+  "properties": {
+    "type": {"const": "DIRECTIVE_ACK"},
+    "directive_id": {"description": "null only when a REJECTED directive had no usable id.", "type": ["string", "null"]},
+    "node_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+    "status": {
+      "description": "APPLIED: stored and announced. DUPLICATE: already applied within 60 s. REJECTED: malformed, nothing written. FAILED: an error while applying.",
+      "enum": ["APPLIED", "DUPLICATE", "REJECTED", "FAILED"]
+    },
+    "current_state": {
+      "description": "This node's view after the directive, for the targeted subscription if it runs here.",
+      "type": "object",
+      "required": ["concurrency", "state"],
+      "properties": {
+        "concurrency": {"type": "integer", "minimum": 0},
+        "state": {"$ref": "common.json#/$defs/state"}
+      }
+    },
+    "error": {"type": "string"},
+    "result": {
+      "description": "EXECUTE_REPLAY only.",
+      "type": "object",
+      "properties": {
+        "replayed": {"type": "integer", "minimum": 0},
+        "set_id": {"type": "string"}
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"enum": ["REJECTED", "FAILED"]}}},
+     "then": {"required": ["error"]}}
+  ]
+}

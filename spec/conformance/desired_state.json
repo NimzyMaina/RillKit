@@ -1,0 +1,320 @@
+{
+  "description": "Combining the global, stream and node state hashes (spec 2.2). null means: use the value given in code.",
+  "cases": [
+    {
+      "name": "nothing stored: run with the code's values",
+      "global": null,
+      "stream": null,
+      "node": null,
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "a global pause pauses every stream",
+      "global": {
+        "state": "PAUSED"
+      },
+      "stream": null,
+      "node": null,
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "PAUSED",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "a stream pause wins over a global RUNNING",
+      "global": {
+        "state": "RUNNING"
+      },
+      "stream": {
+        "state": "PAUSED"
+      },
+      "node": null,
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "PAUSED",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "the most restrictive state wins: DRAINING over MAINTENANCE over PAUSED",
+      "global": {
+        "state": "PAUSED"
+      },
+      "stream": {
+        "state": "DRAINING"
+      },
+      "node": {
+        "state": "MAINTENANCE"
+      },
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "DRAINING",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "states are case-sensitive: a lowercase state is ignored",
+      "global": {
+        "state": "paused"
+      },
+      "stream": null,
+      "node": null,
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "an unknown state is ignored",
+      "global": {
+        "state": "ASLEEP"
+      },
+      "stream": null,
+      "node": null,
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "the stream's concurrency wins over the global value",
+      "global": {
+        "concurrency": "4"
+      },
+      "stream": {
+        "concurrency": "2"
+      },
+      "node": null,
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": 2,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "the node's concurrency wins over the stream's",
+      "global": {
+        "concurrency": "4"
+      },
+      "stream": {
+        "concurrency": "2"
+      },
+      "node": {
+        "concurrency": "3"
+      },
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": 3,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "a node field for this subscription wins over the plain node field",
+      "global": null,
+      "stream": null,
+      "node": {
+        "concurrency": "3",
+        "concurrency:orders:billing": "5",
+        "batch_size:orders:other": "9"
+      },
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": 5,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "subscription fields encode the stream name",
+      "global": null,
+      "stream": null,
+      "node": {
+        "block_ms:orders%3Aeu:billing": "250"
+      },
+      "subscription": {
+        "stream": "orders:eu",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": null,
+        "block_ms": 250,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "a subscription field can pause one subscription",
+      "global": null,
+      "stream": null,
+      "node": {
+        "state:orders:billing": "PAUSED"
+      },
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "PAUSED",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "a subscription field does not apply to another subscription",
+      "global": null,
+      "stream": null,
+      "node": {
+        "state:orders:billing": "PAUSED"
+      },
+      "subscription": {
+        "stream": "orders",
+        "group": "shipping"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "invalid values are ignored and fall back to a less specific scope",
+      "global": {
+        "batch_size": "20"
+      },
+      "stream": {
+        "batch_size": "0"
+      },
+      "node": {
+        "block_ms": "nope",
+        "concurrency": "257"
+      },
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": null,
+        "block_ms": null,
+        "batch_size": 20
+      }
+    },
+    {
+      "name": "hash values are ASCII digit strings: leading zeros are fine; signs, spaces and decimals are not",
+      "global": {
+        "concurrency": "03",
+        "batch_size": "+5"
+      },
+      "stream": {
+        "block_ms": " 100"
+      },
+      "node": {
+        "batch_size": "2.5"
+      },
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": 3,
+        "block_ms": null,
+        "batch_size": null
+      }
+    },
+    {
+      "name": "upper bounds: concurrency 256, block_ms 600000, batch_size 10000",
+      "global": {
+        "concurrency": "256",
+        "block_ms": "600000",
+        "batch_size": "10000"
+      },
+      "stream": null,
+      "node": null,
+      "subscription": {
+        "stream": "orders",
+        "group": "billing"
+      },
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": 256,
+        "block_ms": 600000,
+        "batch_size": 10000
+      }
+    },
+    {
+      "name": "without a subscription only the global and node hashes count",
+      "global": {
+        "state": "RUNNING",
+        "block_ms": "100"
+      },
+      "stream": {
+        "state": "PAUSED"
+      },
+      "node": {
+        "block_ms": "200",
+        "state:orders:billing": "PAUSED"
+      },
+      "subscription": null,
+      "expect": {
+        "state": "RUNNING",
+        "concurrency": null,
+        "block_ms": 200,
+        "batch_size": null
+      }
+    }
+  ]
+}
