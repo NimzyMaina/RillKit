@@ -21,7 +21,7 @@ from .settings import Settings
 from .stream import Stream
 from .tracing import TraceContext, current_traceparent, use_traceparent
 
-__version__ = "0.3.0"
+__version__ = "0.4.1"
 
 __all__ = [
     "AckMessage", "AckPolicy", "BaseMiddleware", "Broker", "Codec", "ConfigurationError",
