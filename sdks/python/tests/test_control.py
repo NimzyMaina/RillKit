@@ -614,3 +614,16 @@ def test_browsing_pages_and_statuses(node, r, name):
         exact = worker.control.browse(name, "g", ids=[busy["id"]])
         assert [m["id"] for m in exact["messages"]] == [busy["id"]]
         release.set()
+
+
+def test_trace_order_follows_parent_spans():
+    from rillkit.controlplane import _trace_order
+
+    child = {"span_id": "b", "parent_span_id": "a", "started_at": 10, "published_at": 10}
+    parent = {"span_id": "a", "parent_span_id": "caller", "started_at": 10,
+              "published_at": 10}
+    sibling = {"span_id": "c", "parent_span_id": "caller", "started_at": 5,
+               "published_at": 5}
+    # A child can be appended before its parent and share its millisecond.
+    assert [r["span_id"] for r in _trace_order([child, parent, sibling])] == [
+        "c", "a", "b"]

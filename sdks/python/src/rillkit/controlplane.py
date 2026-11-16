@@ -261,6 +261,29 @@ def resolve_desired(
     return Desired(state, values["concurrency"], values["block_ms"], values["batch_size"])
 
 
+def _trace_order(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Order attempts by their place in the trace, then by start time.
+
+    Two attempts can start in the same millisecond, and a child can finish before its parent,
+    so timestamps alone are not enough. ``parent_span_id`` gives the causal order: a handler's
+    record follows the record whose span published its message.
+    """
+    spans = {r["span_id"] for r in records if r["span_id"]}
+    parents = {r["span_id"]: r["parent_span_id"] for r in records if r["span_id"]}
+
+    def depth(span_id: str) -> int:
+        seen: set[str] = set()
+        depth = 0
+        while span_id in parents and parents[span_id] in spans and span_id not in seen:
+            seen.add(span_id)
+            span_id = parents[span_id]
+            depth += 1
+        return depth
+
+    return sorted(records, key=lambda r: (depth(r["span_id"]), r["started_at"],
+                                          r["published_at"]))
+
+
 class ControlPlane:
     def __init__(self, broker: "Broker", settings: Control) -> None:
         self.broker = broker
@@ -706,7 +729,7 @@ class ControlPlane:
             except (TypeError, ValueError):
                 continue
             records.append(record)
-        records.sort(key=lambda r: (r["started_at"], r["published_at"]))
+        records = _trace_order(records)
         return {"type": "TRACE_RESPONSE", "trace_id": trace_id, "records": records}
 
     def _entry(self, entry_id: str, fields: dict[str, str], source: str,
