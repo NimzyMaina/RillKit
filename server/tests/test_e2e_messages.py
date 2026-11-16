@@ -133,6 +133,7 @@ def test_throughput_metrics(api, tenant, api_key, worker):
     assert current["success_rate"] == round(8 / 9, 4) and current["bytes"] > 0
     assert current["dlq_length"] == 1
     assert sum(p["succeeded"] for p in m["series"]) == 8
+    assert wait_until(lambda: overview(api, tenant)["streams"])
     s = overview(api, tenant)["streams"][0]
     assert s["dlq_length"] == 1
     assert s["capabilities"] == {"inspect_messages": True, "capture_logs": True,
@@ -160,6 +161,7 @@ def test_a_trace_is_read_across_streams(api, tenant, api_key, worker):
         "orders", "g", entry["id"])
     assert (record["delivery"], record["outcome"]) == (1, "ok")
     assert record["finished_at"] >= record["started_at"] and record["published_at"] > 0
+    assert wait_until(lambda: overview(api, tenant)["streams"])
     caps = overview(api, tenant)["streams"][0]["capabilities"]
     assert caps["trace_records"] is True
 
