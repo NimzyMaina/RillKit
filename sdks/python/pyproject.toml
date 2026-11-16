@@ -8,13 +8,13 @@ version = "0.3.0"
 description = "Simple publish and consume for Redis Streams: consumer groups, retries, DLQ, ack policies and middleware."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Nimrod Maina" }]
 keywords = ["redis", "streams", "consumer-group", "queue", "messaging", "worker"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -30,6 +30,9 @@ dependencies = ["redis>=5.0", "tomli>=1.1; python_version < '3.11'"]
 pydantic = ["pydantic>=2.0"]
 valkey = ["valkey>=6.1.1,<6.3"]
 yaml = ["pyyaml>=6.0"]
+control = [
+    "websockets>=13",
+]
 
 [project.urls]
 Homepage = "https://nimzymaina.github.io/RillKit/"
@@ -48,13 +51,14 @@ dev = [
     "twine",
     "valkey>=6.1.1,<6.3",
     "jsonschema>=4.18",
+    "websockets>=13",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rillkit"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "README.md", "LICENSE", "pyproject.toml"]
+include = ["src", "tests", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]
 
 [tool.hatch.build.targets.sdist.force-include]
 # the shared spec lives at the repository root; ship it so the sdist's conformance tests run

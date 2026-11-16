@@ -8,10 +8,12 @@ existing deployment sees the same keys. ``HashTagKeys`` (the default on a cluste
 its DLQ and its heartbeats in one hash slot so the move to the DLQ can stay a transaction.
 
 Control-plane keys (worker state, directive dedup, node heartbeats, wakeup channels, per-message
-logs and producer cordons) are built here too, so they never move or collide with data keys:
+logs, per-trace records and producer cordons) are built here too, so they never move or collide
+with data keys:
 
 - ``PlainKeys``: ``rillkit:state:``, ``rillkit:dedup:``, ``rillkit:nodes``, ``rillkit:ctl:``,
-  ``rillkit:logs:`` and ``rillkit:cordon:``, with stream names percent-encoded (``%`` and ``:``).
+  ``rillkit:logs:``, ``rillkit:trace:`` and ``rillkit:cordon:``, with stream names
+  percent-encoded (``%`` and ``:``).
 - ``HashTagKeys``: the control tag ``{<tenant>:}`` (``{:}`` without a tenant) inside each
   prefix, and the suffixes ``logs`` and ``cordon`` after a stream's tag. No stream can produce
   the control tag: stream names are non-empty and their colons are percent-encoded.
@@ -110,6 +112,12 @@ class KeyBuilder:
         """STREAM with a TTL: log records captured while handling one message."""
         return self._control(f"logs:{_escape_plain(stream.name)}:{msg_id}")
 
+    def trace(self, trace_id: str) -> str:
+        """STREAM with a TTL: one entry per handler attempt of a trace (only when the worker keeps
+        trace records). It lives with the control keys, not with a stream, because one trace
+        crosses every stream it touches."""
+        return self._control(f"trace:{trace_id}")
+
     def cordon(self, stream: Stream) -> str:
         """STRING: set while producers to ``stream`` are cordoned (maintenance)."""
         return self._control(f"cordon:{_escape_plain(stream.name)}")
@@ -168,6 +176,7 @@ class HashTagKeys(KeyBuilder):
         rk:{orders}:logs:<message id>   (captured handler logs)
         rk:{orders}:cordon              (and rk:{orders}:cordon:buffer)
         rk:{:}:state:global             (control keys share the control tag, see control_tag)
+        rk:{:}:trace:<trace id>         (attempts of one trace, across streams)
 
     ``tenant`` adds an opaque id inside the tag (``rk:{t-42:orders}:stream``) so tenants' keys
     never collide. It is for placement and naming only, not access control: take it from trusted

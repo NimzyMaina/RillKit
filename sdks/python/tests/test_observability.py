@@ -48,6 +48,16 @@ def test_use_traceparent_sets_and_resets_the_context():
         assert len(span.trace_id) == 32
 
 
+def test_publish_many_keeps_one_trace_with_a_span_per_entry(make_broker, r, name):
+    broker = make_broker(middlewares=[TraceContext()])
+    with use_traceparent(PARENT):
+        ids = broker.publish_many(name, [{"n": 1}, {"n": 2}])
+    assert len(ids) == 2
+    spans = [parse_traceparent(fields["traceparent"]) for _, fields in entries(r, sk(name))]
+    assert [span.trace_id for span in spans] == [PARENT.split("-")[1]] * 2
+    assert len({span.span_id for span in spans}) == 2  # a child span per entry, not one reused
+
+
 def test_a_trace_follows_a_message_through_two_streams(make_broker, r, name):
     broker = make_broker(middlewares=[TraceContext()])
     first, second = Stream(name, group="g"), Stream(f"{name}-2", group="g")
@@ -119,6 +129,7 @@ def test_log_capture_stores_each_message_logs(make_broker, r, name):
     failed = read_logs(broker, stream, ids[1])
     assert [x["level"] for x in failed] == ["INFO", "ERROR"] * 2  # two deliveries
     assert "ValueError: bad order" in failed[1]["exc"]
+    assert failed[1]["exc_type"] == "ValueError"  # the class is kept alongside the text
     assert [x["delivery"] for x in failed] == ["1", "1", "2", "2"]
     broker.stop(5)
 

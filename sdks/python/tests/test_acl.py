@@ -15,6 +15,7 @@ import pytest
 from helpers import MODE, fast, keep_server_awake, wait_until
 from rillkit import Broker, Control, HashTagKeys, Idempotent, Message, Settings, Stream, read_logs
 from rillkit.clients import CLIENT_ERRORS
+from rillkit.tracing import parse_traceparent
 
 PREFIX = "acl"
 
@@ -117,7 +118,8 @@ def test_a_tenant_user_cannot_see_other_tenants(server_settings, tenant_user, r)
 
 def test_a_managed_worker_runs_as_a_tenant_acl_user(server_settings, tenant_user, r, caplog):
     """Control mode adds hydration, the wakeup listener, node heartbeats, directives (WATCH,
-    MULTI/EXEC, PUBLISH or SPUBLISH) and log capture (XADD plus EXPIRE): all within the rule."""
+    MULTI/EXEC, PUBLISH or SPUBLISH), log capture and trace records (XADD plus EXPIRE, XRANGE):
+    all within the rule."""
     tenant = f"t-{uuid.uuid4().hex[:6]}"
     user, password = tenant_user(tenant)
     keys = HashTagKeys(prefix=PREFIX, tenant=tenant)
@@ -125,16 +127,18 @@ def test_a_managed_worker_runs_as_a_tenant_acl_user(server_settings, tenant_user
     def managed(node_id: str) -> Broker:
         return Broker(settings=server_settings(username=user, password=password), keys=keys,
                       control=Control(mode="valkey", node_id=node_id, heartbeat_interval=0.5,
-                                      capture_logs=True))
+                                      capture_logs=True, trace_records=True))
 
     worker, admin = managed("node-1"), managed("admin")
     orders = Stream("orders", group="billing")
     handled: list = []
     ids: list = []
+    traces: list = []
 
     @worker.subscribe(orders, consumer="worker-7", **fast())
     def handle(order: dict, msg: Message):
         ids.append(msg.id)
+        traces.append(msg.traceparent)
         logging.getLogger("app").warning("order %s", order["rid"])
         handled.append(order["rid"])
 
@@ -157,6 +161,8 @@ def test_a_managed_worker_runs_as_a_tenant_acl_user(server_settings, tenant_user
             worker.publish(orders, {"rid": "a"})
             assert wait_until(lambda: handled == ["a"], 5)
             assert wait_until(lambda: len(read_logs(worker, orders, ids[0])) == 1, 5)
+            trace_id = parse_traceparent(traces[0]).trace_id
+            assert wait_until(lambda: len(worker.control.trace(trace_id)["records"]) == 1, 5)
             assert worker.control.nodes() == ["node-1"]
             assert worker.control.telemetry()["streams"][0]["stream_key"] == keys.stream(orders)
             worker.stop(5)

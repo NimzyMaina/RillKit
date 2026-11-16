@@ -178,6 +178,8 @@ def create_client(settings: "Settings") -> Client:
     lib = backend(settings.backend)
     options: dict[str, Any] = {"socket_timeout": settings.socket_timeout}
     options.update(settings.client_kwargs)
+    if settings.max_connections is not None:
+        options["max_connections"] = settings.max_connections
     url = settings.url
     if url is None or not _url_credentials(url):
         # Credentials embedded in the url win; the separate fields fill in when it has none.

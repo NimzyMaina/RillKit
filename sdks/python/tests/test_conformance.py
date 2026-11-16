@@ -16,6 +16,7 @@ from rillkit import ConfigurationError, Control, HashTagKeys, KeyBuilder, PlainK
 from rillkit.consumer import (
     dead_letter_entry,
     lane_consumer_name,
+    queue_wait_ms,
     replay_entry,
     retries_exhausted,
     retry_wait_ms,
@@ -71,7 +72,7 @@ def build_key(keys: KeyBuilder, kind: str, args: dict[str, Any]) -> str:
         s = Stream(args["stream"]["name"], dlq=args["stream"].get("dlq"))
         rest = [args[a] for a in ("group", "consumer", "key", "msg_id") if a in args]
         return getattr(keys, kind)(s, *rest)  # type: ignore[no-any-return]
-    rest = [args[a] for a in ("node_id", "directive_id") if a in args]
+    rest = [args[a] for a in ("node_id", "directive_id", "trace_id") if a in args]
     return getattr(keys, kind)(*rest)  # type: ignore[no-any-return]
 
 
@@ -111,8 +112,8 @@ def test_directives(case):
         return
     plan = plan_directive(keys, case["directive"])
     got = {"status": "ACCEPTED", "cmd": plan["cmd"]}
-    if plan["cmd"] == "EXECUTE_REPLAY":
-        got.update(stream=plan["stream"], group=plan["group"], replay=plan["replay"])
+    if plan["cmd"] in ("EXECUTE_REPLAY", "DELETE_DLQ", "CREATE_STREAM"):
+        got.update(stream=plan["stream"], group=plan["group"], action=plan["action"])
     else:
         got.update(key=plan["key"], channel=plan["channel"], fields=plan["fields"])
     assert got == expect
@@ -163,6 +164,12 @@ def test_lane_consumer_name(case):
     assert lane_consumer_name(case["consumer"], case["index"]) == case["expect"]
 
 
+@pytest.mark.parametrize("case", DATA_PLANE["queue_wait"], ids=str)
+def test_queue_wait(case):
+    got = queue_wait_ms(case["published_ms"], case["started_ms"])
+    assert got == pytest.approx(case["expect_ms"])
+
+
 # protocol schemas (spec 5)
 
 
@@ -183,7 +190,9 @@ def validator() -> Any:
     return validate
 
 
-@pytest.mark.parametrize("name", ["telemetry_report", "directive", "directive_ack"])
+@pytest.mark.parametrize("name", ["telemetry_report", "directive", "directive_ack", "hello",
+                                  "welcome", "error", "logs_request", "logs_response",
+                                  "trace_request", "trace_response"])
 def test_schema_examples_are_valid(validator, name):
     validator(name, _example(name))
 
@@ -210,6 +219,11 @@ def _bad_documents() -> list[tuple[str, str, Any]]:
          {**report, "workers": {**report["workers"], "state": "paused"}}),
         ("telemetry_report", "an incomplete keys descriptor",
          {**report, "keys": {"layout": "plain"}}),
+        ("trace_request", "an uppercase trace id",
+         {**_example("trace_request"), "trace_id": "4BF92F3577B34DA6A3CE929D0E0E4736"}),
+        ("trace_response", "an unknown outcome",
+         {**_example("trace_response"), "records": [
+             {**_example("trace_response")["records"][0], "outcome": "retried"}]}),
     ]
 
 

@@ -60,6 +60,44 @@ def test_publish_redis_failure_raises_publish_error(broker: Broker, r, name):
         broker.publish(name, {"a": 1})
 
 
+def test_publish_many_writes_every_entry_in_order(broker: Broker, r, name):
+    ids = broker.publish_many(name, [{"n": i} for i in range(5)])
+    stored = entries(r, sk(name))
+    assert [entry_id for entry_id, _ in stored] == ids
+    assert [json.loads(fields["data"])["n"] for _, fields in stored] == list(range(5))
+
+
+def test_publish_many_handles_an_empty_list(broker: Broker, r, name):
+    assert broker.publish_many(name, []) == []
+    assert r.xlen(sk(name)) == 0
+
+
+def test_publish_many_encodes_before_writing_anything(broker: Broker, r, name):
+    circular: list = []
+    circular.append(circular)
+    with pytest.raises(PublishError):
+        broker.publish_many(name, [{"n": 1}, circular])
+    assert r.xlen(sk(name)) == 0
+
+
+def test_publish_many_applies_maxlen(broker: Broker, r, name):
+    broker.publish_many(name, [{"n": i} for i in range(500)], maxlen=10)
+    assert 10 <= r.xlen(sk(name)) < 500
+
+
+def test_publish_many_runs_publish_middleware_for_every_entry(broker: Broker, name):
+    from rillkit import BaseMiddleware
+
+    class Tag(BaseMiddleware):
+        def publish_scope(self, call_next, cmd):
+            cmd.headers["tag"] = f"n={cmd.body['n']}"
+            return call_next(cmd)
+
+    tagged = Broker(client=broker.client, middlewares=[Tag()])
+    tagged.publish_many(name, [{"n": 1}, {"n": 2}])
+    assert [f["tag"] for _, f in entries(broker.client, sk(name))] == ["n=1", "n=2"]
+
+
 def test_stream_dlq_name_default_and_override():
     assert Stream("orders").dlq_name == "orders-dlq"
     assert Stream("orders", dlq="dead").dlq_name == "dead"

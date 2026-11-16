@@ -64,4 +64,4 @@ RILLKIT_TEST_BACKEND=valkey RILLKIT_TEST_MODE=cluster \
   RILLKIT_TEST_CLUSTER_NODES=127.0.0.1:7101 uv run pytest
 ```
 
-MIT licensed.
+Licensed under the Apache License 2.0 (releases up to and including 0.3.0: MIT).

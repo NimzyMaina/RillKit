@@ -109,6 +109,11 @@ def test_toml_file_maps_onto_settings_and_control(tmp_path, monkeypatch):
     assert "secret-value" not in repr(c)
 
 
+def test_max_connections_from_the_config_file(tmp_path):
+    path = write(tmp_path, "rk.toml", "[connection]\nmax_connections = 300\n")
+    assert Settings.from_env(config=path).max_connections == 300
+
+
 def test_json_file_and_rillkit_config_variable(tmp_path, monkeypatch):
     path = write(tmp_path, "rk.json", json.dumps({
         "connection": {"host": "cache", "port": 6380, "socket_timeout": "none", "ssl": True},
@@ -206,17 +211,22 @@ def test_capture_logs_is_off_unless_asked(tmp_path, monkeypatch):
     assert Control.from_env(config=path).capture_logs is True
 
 
+def test_trace_records_are_off_unless_asked(tmp_path, monkeypatch):
+    assert Control(mode="valkey").trace_records is False
+    monkeypatch.setenv("RILLKIT_TRACE_RECORDS", "true")
+    assert Control.from_env().trace_records is True
+    monkeypatch.delenv("RILLKIT_TRACE_RECORDS")
+    path = write(tmp_path, "rk.toml", "[control]\ntrace_records = true\n")
+    assert Control.from_env(config=path).trace_records is True
+    assert Control(trace_records="1").trace_records is True
+
+
 def test_control_from_env(monkeypatch):
     monkeypatch.setenv("RILLKIT_CONTROL", "relay")
     monkeypatch.setenv("RILLKIT_CONTROL_URL", "wss://cloud.example")
     monkeypatch.setenv("RILLKIT_API_KEY", "k")
     c = Control.from_env()
     assert (c.mode, c.url, c.api_key) == ("relay", "wss://cloud.example", "k")
-
-
-def test_relay_mode_is_refused_until_the_relay_client_ships():
-    with pytest.raises(ConfigurationError, match="Relay client"):
-        Broker(control=Control(mode="relay", url="wss://x", api_key="k"))
 
 
 def test_broker_reads_the_control_mode_from_the_environment(monkeypatch):

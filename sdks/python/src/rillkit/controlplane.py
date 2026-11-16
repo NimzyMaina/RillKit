@@ -22,15 +22,17 @@ import json
 import logging
 import os
 import random
+import re
 import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .clients import WATCH_ERRORS, is_cluster, node_client_for, same_slot
 from .config import Control, default_node_id
-from .consumer import Subscriber, _text
+from .consumer import TRACE_MAX_RECORDS, Subscriber, _text
 from .keys import _escape_plain
 from .stream import Stream
 
@@ -45,8 +47,13 @@ _RANK = {"RUNNING": 0, "PAUSED": 1, "MAINTENANCE": 2, "DRAINING": 3}
 SCOPES = ("global", "stream", "node")
 COMMANDS = (
     "SET_STATE", "SET_CONCURRENCY", "SET_POLL_CONFIG", "MAINTENANCE_ON", "MAINTENANCE_OFF",
-    "EXECUTE_REPLAY",
+    "EXECUTE_REPLAY", "DELETE_DLQ", "CREATE_STREAM",
 )
+# one-off actions on a stream, as opposed to desired state: deduplicated, then run once
+ACTIONS = ("EXECUTE_REPLAY", "DELETE_DLQ", "CREATE_STREAM")
+MAX_IDS = 1000
+MAX_DATA_BYTES = 1024 * 1024
+_ENTRY_ID = re.compile(r"^[0-9]+-[0-9]+$")
 DEDUP_TTL = 60
 MAX_CONCURRENCY = 256
 MAX_BLOCK_MS = 600_000
@@ -85,6 +92,19 @@ def _positive(value: Any, name: str, top: int, strings: bool = False) -> int:
     return number
 
 
+def _entry_ids(value: Any) -> list[str]:
+    """A list of 1 to MAX_IDS stream entry ids (``<ms>-<seq>``), duplicates removed in order."""
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_IDS:
+        raise DirectiveError(f"ids must be a list of 1 to {MAX_IDS} entry ids")
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not _ENTRY_ID.match(item):
+            raise DirectiveError(f"{item!r} is not a stream entry id like 1718000000000-0")
+        if item not in out:
+            out.append(item)
+    return out
+
+
 def _sub_suffix(stream: str, group: str) -> str:
     return f":{_escape_plain(stream)}:{group}"
 
@@ -120,16 +140,10 @@ def plan_directive(keys: Any, directive: Any) -> dict[str, Any]:
         if value is not None and (not isinstance(value, str) or not value):
             raise DirectiveError(f"target.{name} must be a non-empty string")
 
-    if cmd == "EXECUTE_REPLAY":
+    if cmd in ACTIONS:
         if not stream:
-            raise DirectiveError("EXECUTE_REPLAY needs target.stream and target.group")
-        if params.get("set_id") is not None:
-            if not isinstance(params["set_id"], str) or not params["set_id"]:
-                raise DirectiveError("set_id must be a non-empty string")
-            replay: dict[str, Any] = {"set_id": params["set_id"]}
-        else:
-            replay = {"count": _positive(params.get("count", 100), "count", MAX_REPLAY_COUNT)}
-        return {"cmd": cmd, "stream": stream, "group": group, "replay": replay}
+            raise DirectiveError(f"{cmd} needs target.stream and target.group")
+        return {"cmd": cmd, "stream": stream, "group": group, "action": _plan_action(cmd, params)}
 
     fields: dict[str, str] = {}
     if cmd in ("SET_STATE", "MAINTENANCE_ON", "MAINTENANCE_OFF"):
@@ -167,6 +181,47 @@ def plan_directive(keys: Any, directive: Any) -> dict[str, Any]:
             fields = {f"{name}{suffix}": value for name, value in fields.items()}
     return {"cmd": cmd, "key": key, "channel": channel, "fields": fields,
             "target": {"stream": stream, "group": group}}
+
+
+def _plan_action(cmd: str, params: Mapping[str, Any]) -> dict[str, Any]:
+    """What an action directive does, validated (see ``plan_directive``)."""
+    if cmd == "CREATE_STREAM":
+        start = params.get("start", "$")
+        if start not in ("$", "0"):
+            raise DirectiveError("start must be \"$\" (new messages only) or \"0\" (everything)")
+        return {"start": start}
+    if cmd == "DELETE_DLQ":
+        if params.get("all") is True and params.get("ids") is None:
+            return {"all": True}
+        if params.get("all") is True:
+            raise DirectiveError("DELETE_DLQ takes ids or all: true, not both")
+        if params.get("all") not in (None, False):
+            raise DirectiveError("all must be true")
+        if params.get("ids") is None:
+            raise DirectiveError("DELETE_DLQ needs ids or all: true")
+        return {"ids": _entry_ids(params["ids"])}
+    # EXECUTE_REPLAY: the oldest count entries, chosen entries (optionally edited), or set_id
+    given = [k for k in ("count", "ids", "set_id") if params.get(k) is not None]
+    if len(given) > 1:
+        raise DirectiveError("EXECUTE_REPLAY takes one of count, ids or set_id")
+    if params.get("data") is not None and "ids" not in given:
+        raise DirectiveError("data can only be given with ids")
+    if "set_id" in given:
+        if not isinstance(params["set_id"], str) or not params["set_id"]:
+            raise DirectiveError("set_id must be a non-empty string")
+        return {"set_id": params["set_id"]}
+    if "ids" in given:
+        ids = _entry_ids(params["ids"])
+        data = params.get("data") or {}
+        if not isinstance(data, Mapping):
+            raise DirectiveError("data must map entry ids to new data")
+        for key, value in data.items():
+            if key not in ids:
+                raise DirectiveError(f"data names {key!r}, which is not in ids")
+            if not isinstance(value, str) or len(value.encode()) > MAX_DATA_BYTES:
+                raise DirectiveError("each data value must be a string of at most 1 MB")
+        return {"ids": ids, "data": dict(data)}
+    return {"count": _positive(params.get("count", 100), "count", MAX_REPLAY_COUNT)}
 
 
 def resolve_desired(
@@ -220,6 +275,11 @@ class ControlPlane:
         self._next_beat = 0.0
         self._started_at = int(time.time())
         self._rate_mark: dict[int, tuple[float, int]] = {}
+        self.relay: Optional[Any] = None
+        if settings.mode == "relay":
+            from .relay import Relay
+
+            self.relay = Relay(self, settings)
         self._cpu_mark: Optional[tuple[float, float]] = None
 
     @property
@@ -292,11 +352,15 @@ class ControlPlane:
         self._beat()
         self._thread = threading.Thread(target=self._listen, name="rillkit-control", daemon=True)
         self._thread.start()
+        if self.relay is not None:
+            self.relay.start()
 
     def stop(self, timeout: Optional[float] = None) -> None:
         self._running = False
         self._stopping.set()
         self.wake()
+        if self.relay is not None:
+            self.relay.stop(timeout)
         if self._thread is not None:
             self._thread.join(timeout)
         try:
@@ -452,6 +516,16 @@ class ControlPlane:
                 "lag": lag,
                 "pending": pending,
                 "ack_rate_sec": self._rate(sub),
+                "concurrency": sub.lanes,
+                "state": self.desired(sub).state,
+                "succeeded_total": sub.succeeded_total,
+                "failed_total": sub.failed_total,
+                "dead_lettered_total": sub.dead_lettered_total,
+                "bytes_total": sub.bytes_total,
+                "dlq_length": self.client.xlen(sub.dlq_key),
+                "attempts_total": sub.attempts_total,
+                "wait_ms_total": round(sub.wait_ms_total, 3),
+                "work_ms_total": round(sub.work_ms_total, 3),
             })
         return report
 
@@ -489,11 +563,11 @@ class ControlPlane:
         except (DirectiveError, ValueError) as e:
             return self._ack(directive_id, "REJECTED", error=str(e))
         try:
-            if plan["cmd"] == "EXECUTE_REPLAY":
+            if plan["cmd"] in ACTIONS:
                 if not self.client.set(self.keys.dedup(directive_id), "1", nx=True,
                                        ex=DEDUP_TTL):
                     return self._ack(directive_id, "DUPLICATE")
-                result = self._replay(plan)
+                result = self._act(plan)
                 return self._ack(directive_id, "APPLIED", result=result)
             fields = {**plan["fields"], "directive_id": directive_id,
                       "updated_at": str(int(time.time() * 1000))}
@@ -543,13 +617,149 @@ class ControlPlane:
         else:
             self.client.publish(channel, message)
 
-    def _replay(self, plan: Mapping[str, Any]) -> dict[str, Any]:
+    def _act(self, plan: Mapping[str, Any]) -> dict[str, Any]:
         stream = self._stream(plan["stream"], plan["group"])
-        replay = plan["replay"]
-        if "set_id" in replay:
-            self.client.xgroup_setid(self.keys.stream(stream), plan["group"], replay["set_id"])
-            return {"set_id": replay["set_id"]}
-        return {"replayed": self.broker.replay_dlq(stream, count=replay["count"])}
+        action = plan["action"]
+        if plan["cmd"] == "CREATE_STREAM":
+            return {"created": self.broker.create_group(stream, plan["group"], action["start"])}
+        if plan["cmd"] == "DELETE_DLQ":
+            if action.get("all"):
+                return {"deleted": self.broker.purge_dlq(stream)}
+            return {"deleted": self.broker.delete_dlq_entries(stream, action["ids"])}
+        if "set_id" in action:
+            self.client.xgroup_setid(self.keys.stream(stream), plan["group"], action["set_id"])
+            return {"set_id": action["set_id"]}
+        if "ids" in action:
+            replayed, missing = self.broker.replay_dlq_entries(stream, action["ids"],
+                                                               action["data"])
+            return {"replayed": replayed, "missing": missing}
+        return {"replayed": self.broker.replay_dlq(stream, count=action["count"])}
+
+    def capabilities(self) -> dict[str, bool]:
+        """What this worker lets the control plane see (sent in HELLO)."""
+        from .logs import LogCapture
+
+        return {"inspect_messages": bool(self.settings.inspect_messages),
+                "capture_logs": any(isinstance(m, LogCapture) for m in self.broker.middlewares),
+                "trace_records": bool(self.settings.trace_records)}
+
+    def browse(self, stream_name: str, group: str, source: str = "stream",
+               before: Optional[str] = None, count: int = 50,
+               ids: Optional[list[str]] = None, after: Optional[str] = None) -> dict[str, Any]:
+        """A page of a stream's (or its DLQ's) entries, newest first, for the dashboard.
+
+        No cursor: the newest ``count``. ``before``: the next older page. ``after``: only
+        entries newer than that id, the oldest ``count`` of them (``more_after`` says whether
+        newer ones are left), for appending to a list already shown.
+
+        Payloads and DLQ error texts are included only with ``inspect_messages``. Entries of the
+        stream carry their status in ``group``: waiting (not delivered yet), pending (delivered,
+        not acknowledged, with its consumer and deliveries) or acked."""
+        stream = self._stream(stream_name, group)
+        key = self.keys.dlq(stream) if source == "dlq" else self.keys.stream(stream)
+        payloads = bool(self.settings.inspect_messages)
+        as_of = datetime.now(timezone.utc).isoformat()
+        rows: list[Any] = []
+        more_after = False
+        if ids:
+            for entry_id in ids:
+                rows.extend(self.client.xrange(key, entry_id, entry_id))
+        elif after:
+            rows = list(self.client.xrange(key, min=f"({after}", max="+", count=count))
+            more_after = len(rows) == count
+            rows.reverse()  # newest first, like every page
+        else:
+            top = f"({before}" if before else "+"
+            rows = list(self.client.xrevrange(key, max=top, min="-", count=count))
+        messages = [self._entry(_text(i), {_text(k): _text(v) for k, v in raw.items()}, source,
+                                payloads) for i, raw in rows]
+        if source == "stream" and messages:
+            self._add_status(key, group, messages)
+        more = not ids and not after and len(rows) == count
+        return {"messages": messages, "next_before": messages[-1]["id"] if more else None,
+                "more_after": more_after, "total": int(self.client.xlen(key)),
+                "payloads": payloads, "as_of": as_of}
+
+    def trace(self, trace_id: str) -> dict[str, Any]:
+        """The recorded attempts of one trace, oldest first (data-plane 9.2). Empty when this
+        worker keeps no trace records, the trace is unknown, or its key expired."""
+        records: list[dict[str, Any]] = []
+        rows: Any = self.client.xrange(self.keys.trace(trace_id), count=TRACE_MAX_RECORDS)
+        for _entry_id, raw in rows:
+            f = {_text(k): _text(v) for k, v in raw.items()}
+            try:
+                record = {
+                    "trace_id": f.get("trace_id", trace_id),
+                    "span_id": f.get("span_id", ""),
+                    "parent_span_id": f.get("parent_span_id", ""),
+                    "stream": f.get("stream", ""),
+                    "group": f.get("group", ""),
+                    "message_id": f.get("message_id", ""),
+                    "consumer": f.get("consumer", ""),
+                    "node_id": f.get("node_id", ""),
+                    "delivery": int(f.get("delivery", "1")),
+                    "published_at": int(f.get("published_at", "0")),
+                    "started_at": int(f.get("started_at", "0")),
+                    "finished_at": int(f.get("finished_at", "0")),
+                    "outcome": f.get("outcome", "ok"),
+                }
+            except (TypeError, ValueError):
+                continue
+            records.append(record)
+        records.sort(key=lambda r: (r["started_at"], r["published_at"]))
+        return {"type": "TRACE_RESPONSE", "trace_id": trace_id, "records": records}
+
+    def _entry(self, entry_id: str, fields: dict[str, str], source: str,
+               payloads: bool) -> dict[str, Any]:
+        from .consumer import entry_size
+
+        visible = {k: v for k, v in fields.items() if not k.startswith("x-")}
+        entry: dict[str, Any] = {"id": entry_id, "size": entry_size(fields),
+                                 "fields": visible if payloads else None,
+                                 "traceparent": fields.get("traceparent")}
+        if source == "dlq":
+            try:
+                deliveries = int(fields.get("x-deliveries", "0"))
+            except ValueError:
+                deliveries = 0
+            entry["dead_letter"] = {
+                "original_id": fields.get("x-original-id"), "stream": fields.get("x-stream"),
+                "group": fields.get("x-group"), "deliveries": deliveries,
+                "error": fields.get("x-error") if payloads else None,
+            }
+        return entry
+
+    def _add_status(self, key: str, group: str, messages: list[dict[str, Any]]) -> None:
+        def order(entry_id: Any) -> tuple[int, int]:
+            ms, _, seq = _text(entry_id).partition("-")
+            return int(ms), int(seq or 0)
+
+        try:
+            groups: Any = self.client.xinfo_groups(key)
+        except Exception:
+            groups = []
+        info = next((g for g in groups if _text(g.get("name")) == group), None)
+        if info is None:
+            return  # no such group yet: statuses are unknown
+        last = order(info.get("last-delivered-id") or "0-0")
+        newest, oldest = messages[0]["id"], messages[-1]["id"]
+        pending: Any = self.client.xpending_range(key, group, oldest, newest, len(messages))
+        by_id = {_text(p["message_id"]): p for p in pending}
+        for m in messages:
+            p = by_id.get(m["id"])
+            if p is not None:
+                m.update(status="pending", deliveries=p["times_delivered"],
+                         consumer=_text(p["consumer"]), idle_ms=p["time_since_delivered"])
+            else:
+                m.update(status="acked" if order(m["id"]) <= last else "waiting",
+                         deliveries=None, consumer=None, idle_ms=None)
+
+    def stream_named(self, name: str) -> Stream:
+        """The subscribed ``Stream`` called ``name`` (any group), else a plain ``Stream``."""
+        for sub in self.broker.subscribers:
+            if sub.stream.name == name:
+                return sub.stream
+        return Stream(name)
 
     def _stream(self, name: str, group: str) -> Stream:
         """The subscribed ``Stream`` (with its DLQ name) for ``name`` and ``group``, if any."""

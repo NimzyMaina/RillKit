@@ -62,11 +62,10 @@ class _Capture:
         if traceparent:
             fields["traceparent"] = traceparent
         if exc is not None:
+            fields["exc_type"] = type(exc).__name__
             if self.exceptions:
                 text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 fields["exc"] = text[:_MESSAGE_LIMIT]
-            else:
-                fields["exc_type"] = type(exc).__name__
         self.records.append(fields)
 
 
@@ -109,8 +108,8 @@ class LogCapture(BaseMiddleware):
       ``app.orders`` too). Default: every logger.
     - ``redact``: called with each record (a dict of strings) before it is stored; return a
       changed record, or None to drop it.
-    - ``exceptions``: store exception messages and tracebacks. Off by default, because they
-      often contain message data; only the exception class name is kept then.
+    - ``exceptions``: also store exception messages and tracebacks (``exc``). Off by default,
+      because they often contain message data; the class name (``exc_type``) is always kept.
 
     Failing to write the logs, or a ``redact`` that raises, never fails the message: the
     records of that run are dropped and a warning is logged.

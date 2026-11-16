@@ -11,6 +11,8 @@ import pytest
 
 from helpers import MODE, entries, fast, keep_server_awake, settle, wait_until
 from rillkit import Broker, Control, HashTagKeys, KeyBuilder, Message, PlainKeys, Stream
+from rillkit.consumer import entry_size
+from rillkit.tracing import parse_traceparent
 
 
 @pytest.fixture
@@ -376,3 +378,239 @@ def test_plain_keys_on_a_cluster_use_the_ordered_fallback(make_broker, name):
     key = PlainKeys().state_stream(Stream(name), "g")
     assert admin.client.hget(key, "state") == b"PAUSED"
     admin.client.delete(key)
+
+
+# DLQ management, stream creation, browsing and counters (the dashboard's stream page)
+
+
+def _dead_letters(worker, r, stream, n, stop=True):
+    """Run ``n`` messages that always fail through ``worker`` so they end in the DLQ.
+
+    ``stop=False`` leaves it running for a caller that still needs its client: on a cluster a
+    closed client cannot be reused."""
+    with keep_server_awake(r):
+        worker.start()
+        for i in range(n):
+            worker.publish(stream, {"n": i})
+        assert wait_until(lambda: r.xlen(worker.keys.dlq(stream)) == n, 10)
+        if stop:
+            worker.stop(5)
+    return [e[0] for e in entries(r, worker.keys.dlq(stream))]
+
+
+def failing(node, name, **kw):
+    worker = node(**kw)
+    stream = Stream(name, group="g")
+
+    @worker.subscribe(stream, max_retries=0, **fast())
+    def handle(body: dict) -> None:
+        raise ValueError(f"bad order {body['n']}")
+
+    return worker, stream
+
+
+def test_counters_and_telemetry(node, r, name):
+    worker = node()
+    stream = Stream(name, group="g")
+
+    @worker.subscribe(stream, max_retries=0, **fast())
+    def handle(body: dict) -> None:
+        if body["n"] == 2:
+            raise ValueError("no")
+
+    with keep_server_awake(r):
+        worker.start()
+        for n in range(3):
+            worker.publish(stream, {"n": n})
+        sub = worker.subscribers[0]
+        assert wait_until(lambda: sub.succeeded_total == 2 and sub.dead_lettered_total == 1, 10)
+        assert sub.failed_total == 1
+        # every field of each handled entry (managed brokers add a traceparent header)
+        handled = entries(r, worker.keys.stream(stream))
+        assert sub.bytes_total == sum(entry_size(f) for _, f in handled)
+        [s] = worker.control.telemetry()["streams"]
+        assert (s["succeeded_total"], s["failed_total"], s["dead_lettered_total"],
+                s["dlq_length"]) == (2, 1, 1, 1)
+
+
+def test_attempt_timings_are_counted_and_reported(node, r, name):
+    worker = node()
+    stream = Stream(name, group="g")
+    collecting(worker, stream, [])
+    with keep_server_awake(r):
+        worker.start()
+        worker.publish(stream, {"n": 1})
+        sub = worker.subscribers[0]
+        assert wait_until(lambda: sub.attempts_total == 1, 5)
+        assert sub.wait_ms_total >= 0 and sub.work_ms_total >= 0
+        [s] = worker.control.telemetry()["streams"]
+        assert s["attempts_total"] == 1
+        assert s["wait_ms_total"] == round(sub.wait_ms_total, 3)
+        assert s["work_ms_total"] == round(sub.work_ms_total, 3)
+        assert worker.control.capabilities()["trace_records"] is False
+        worker.stop(5)
+
+
+def test_trace_records_are_opt_in(node, r, name):
+    worker = node()
+    traces: list = []
+
+    @worker.subscribe(Stream(name, group="g"), **fast())
+    def handle(body: dict, msg: Message) -> None:
+        traces.append(msg.raw.get("traceparent"))
+
+    with keep_server_awake(r):
+        worker.start()
+        worker.publish(name, {"n": 1})
+        assert wait_until(lambda: len(traces) == 1, 5)
+        trace_id = parse_traceparent(traces[0]).trace_id
+        assert not r.exists(worker.keys.trace(trace_id))
+        worker.stop(5)
+
+
+def test_trace_records_follow_a_trace_across_streams(node, r, name):
+    worker = node(trace_records=True)
+    first, second = Stream(name, group="g"), Stream(f"{name}-2", group="g")
+    out = worker.publisher(second)
+    ids: dict[str, str] = {}
+    traces: dict[str, str] = {}
+    entry_traces: dict[str, str] = {}
+
+    @worker.subscribe(first, **fast())
+    @out
+    def step(body: dict, msg: Message) -> dict:
+        ids["first"], traces["first"] = msg.id, msg.traceparent
+        entry_traces["first"] = msg.raw.get("traceparent")
+        return body
+
+    @worker.subscribe(second, **fast())
+    def end(body: dict, msg: Message) -> None:
+        ids["second"], traces["second"] = msg.id, msg.traceparent
+
+    with keep_server_awake(r):
+        worker.start()
+        worker.publish(first, {"n": 1})
+        assert wait_until(lambda: len(ids) == 2, 10)
+        trace_id = parse_traceparent(traces["first"]).trace_id
+        assert wait_until(lambda: len(worker.control.trace(trace_id)["records"]) == 2, 5)
+        records = worker.control.trace(trace_id)["records"]
+        assert [(x["stream"], x["message_id"]) for x in records] == [
+            (name, ids["first"]), (f"{name}-2", ids["second"])]
+        assert [x["outcome"] for x in records] == ["ok", "ok"]
+        assert all(x["trace_id"] == trace_id for x in records)
+        assert records[0]["parent_span_id"] == parse_traceparent(
+            entry_traces["first"]).span_id
+        worker.stop(5)
+
+
+def test_trace_records_capture_each_attempt_and_its_outcome(node, r, name):
+    worker = node(trace_records=True)
+    stream = Stream(name, group="g")
+    traces: dict[int, str] = {}
+
+    @worker.subscribe(stream, max_retries=1, **fast())
+    def handle(body: dict, msg: Message) -> None:
+        traces[body["n"]] = parse_traceparent(msg.raw.get("traceparent")).trace_id
+        if body.get("fail"):
+            raise ValueError("no")
+
+    with keep_server_awake(r):
+        worker.start()
+        worker.publish(stream, {"n": 1})
+        worker.publish(stream, {"n": 2, "fail": True})
+        assert wait_until(lambda: r.xlen(worker.keys.dlq(stream)) == 1, 10)
+        records = worker.control.trace(traces[2])["records"]
+        assert [(x["delivery"], x["outcome"]) for x in records] == [
+            (1, "error"), (2, "dead_letter")]
+        assert 0 < r.ttl(worker.keys.trace(traces[2])) <= 3600
+        worker.stop(5)
+
+
+def test_dlq_directives(node, admin, r, name):
+    worker, stream = failing(node, name)
+    ids = _dead_letters(worker, r, stream, 4)
+    target = {"stream": name, "group": "g"}
+    edited = '{"n": 100}'
+    ack = apply_ok(admin, directive("EXECUTE_REPLAY", "stream", target=target,
+                                    ids=[ids[0], ids[1], "9-9"], data={ids[1]: edited}))
+    assert ack["result"] == {"replayed": 2, "missing": ["9-9"]}
+    replayed = [f for _, f in entries(r, worker.keys.stream(stream))][-2:]
+    assert [f["data"] for f in replayed] == ['{"n": 0}', edited]
+    assert not any(k.startswith("x-") for f in replayed for k in f)
+    ack = apply_ok(admin, directive("DELETE_DLQ", "stream", target=target, ids=[ids[2]]))
+    assert ack["result"] == {"deleted": 1}
+    assert [e[0] for e in entries(r, worker.keys.dlq(stream))] == [ids[3]]
+    ack = apply_ok(admin, directive("DELETE_DLQ", "stream", target=target, all=True))
+    assert ack["result"] == {"deleted": 1}
+    assert r.xlen(worker.keys.dlq(stream)) == 0
+
+
+def test_create_stream_directive(admin, keys, r, name):
+    target = {"stream": name, "group": "fresh"}
+    assert apply_ok(admin, directive("CREATE_STREAM", "stream", target=target))["result"] == {
+        "created": True}
+    groups = r.xinfo_groups(keys.stream(Stream(name)))
+    assert [g["name"] for g in groups] == [b"fresh"]
+    again = apply_ok(admin, directive("CREATE_STREAM", "stream", target=target, start="0"))
+    assert again["result"] == {"created": False}
+
+
+def test_browsing_hides_payloads_unless_inspection_is_allowed(node, r, name):
+    worker, stream = failing(node, name)
+    _dead_letters(worker, r, stream, 2, stop=False)
+    hidden = worker.control.browse(name, "g", "dlq")
+    assert hidden["payloads"] is False and hidden["total"] == 2
+    entry = hidden["messages"][0]
+    assert entry["fields"] is None and entry["dead_letter"]["error"] is None
+    assert entry["dead_letter"]["deliveries"] == 1 and entry["dead_letter"]["group"] == "g"
+    assert entry["size"] > 0
+    worker.stop(5)  # a closed cluster client cannot be reused
+
+    shown = node(inspect_messages=True)
+    page = shown.control.browse(name, "g", "dlq")
+    assert page["payloads"] is True
+    newest = page["messages"][0]
+    assert newest["fields"]["data"] == '{"n": 1}'  # newest first
+    assert not any(k.startswith("x-") for k in newest["fields"])  # DLQ context is metadata
+    assert newest["traceparent"] == newest["fields"]["traceparent"]
+    assert newest["dead_letter"]["error"] == "bad order 1"
+    assert shown.control.capabilities() == {"inspect_messages": True, "capture_logs": False,
+                                            "trace_records": False}
+
+
+def test_browsing_pages_and_statuses(node, r, name):
+    worker = node(inspect_messages=True)
+    stream = Stream(name, group="g")
+    release = threading.Event()
+
+    @worker.subscribe(stream, **fast())
+    def handle(body: dict) -> None:
+        if body["n"] == 1:
+            release.wait(5)
+
+    with keep_server_awake(r):
+        worker.publish(stream, {"n": 0})
+        worker.publish(stream, {"n": 1})
+        worker.start()
+        assert wait_until(lambda: worker.subscribers[0].in_flight == 1, 5)
+        worker.subscribers[0].stop()  # nothing more is read; message 1 stays in flight
+        worker.publish(stream, {"n": 2})
+        page = worker.control.browse(name, "g", count=2)
+        assert [m["fields"]["data"] for m in page["messages"]] == ['{"n": 2}', '{"n": 1}']
+        waiting, busy = page["messages"]
+        assert waiting["status"] == "waiting"
+        assert (busy["status"], busy["deliveries"]) == ("pending", 1)
+        assert busy["consumer"] == worker.subscribers[0].consumer
+        older = worker.control.browse(name, "g", count=2, before=page["next_before"])
+        assert [m["status"] for m in older["messages"]] == ["acked"]
+        assert older["next_before"] is None and older["total"] == 3
+        oldest_id = older["messages"][0]["id"]
+        newer = worker.control.browse(name, "g", count=1, after=oldest_id)
+        assert [m["fields"]["data"] for m in newer["messages"]] == ['{"n": 1}']  # oldest first
+        assert newer["more_after"] is True and newer["next_before"] is None
+        rest = worker.control.browse(name, "g", count=5, after=oldest_id)
+        assert [m["fields"]["data"] for m in rest["messages"]] == ['{"n": 2}', '{"n": 1}']
+        assert rest["more_after"] is False and rest["as_of"].endswith("+00:00")
+        exact = worker.control.browse(name, "g", ids=[busy["id"]])
+        assert [m["id"] for m in exact["messages"]] == [busy["id"]]
+        release.set()

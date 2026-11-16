@@ -165,6 +165,8 @@ def test_control_keys_match_the_spec_tables():
         "node_channel": "rillkit:ctl:node:worker-node-01",
     }
     assert plain.logs(s, "1794669071538-1") == "rillkit:logs:orders:1794669071538-1"
+    assert plain.trace("4bf92f3577b34da6a3ce929d0e0e4736") == (
+        "rillkit:trace:4bf92f3577b34da6a3ce929d0e0e4736")
     assert plain.cordon(s) == "rillkit:cordon:orders"
     assert plain.cordon_buffer(s) == "rillkit:cordon:orders:buffer"
 
@@ -180,11 +182,15 @@ def test_control_keys_match_the_spec_tables():
         "node_channel": "shop:{t-42:}:ctl:node:worker-node-01",
     }
     assert shop.logs(s, "1794669071538-1") == "shop:{t-42:orders}:logs:1794669071538-1"
+    assert shop.trace("4bf92f3577b34da6a3ce929d0e0e4736") == (
+        "shop:{t-42:}:trace:4bf92f3577b34da6a3ce929d0e0e4736")
     assert shop.cordon(s) == "shop:{t-42:orders}:cordon"
     assert shop.cordon_buffer(s) == "shop:{t-42:orders}:cordon:buffer"
 
     assert HashTagKeys().state_global() == "rk:{:}:state:global"
     assert HashTagKeys().node("worker-node-01") == "rk:{:}:nodes:worker-node-01"
+    assert HashTagKeys().trace("4bf92f3577b34da6a3ce929d0e0e4736") == (
+        "rk:{:}:trace:4bf92f3577b34da6a3ce929d0e0e4736")
     assert HashTagKeys(prefix="").state_global() == "{:}:state:global"
 
 
@@ -202,6 +208,7 @@ def test_control_keys_share_one_slot_per_namespace(tenant):
     keys = HashTagKeys(tenant=tenant)
     names = set(_control_keys(keys, Stream("orders:eu}")).values())
     names |= set(_control_keys(keys, Stream("x"), "g2", "node{7}").values())
+    names.add(keys.trace("4bf92f3577b34da6a3ce929d0e0e4736"))
     assert len({slot(k) for k in names}) == 1
 
 
@@ -227,11 +234,12 @@ def test_control_and_data_keys_never_collide():
                 "done": keys.idempotency(s, "k"), "consumers": keys.consumers(s, "g"),
                 "logs": keys.logs(s, "1-0"), "cordon": keys.cordon(s),
                 "buffer": keys.cordon_buffer(s),
+                "trace": keys.trace("4bf92f3577b34da6a3ce929d0e0e4736"),
                 **{f"ctl-{k}": v for k, v in _control_keys(keys, s, "g", "n").items()},
             }
             for kind, key in found.items():
                 owner = (prefix, tenant, None if kind.startswith("ctl-") and kind not in (
-                    "ctl-state_stream",) else name, kind)
+                    "ctl-state_stream",) or kind == "trace" else name, kind)
                 assert seen.setdefault(key, owner) == owner, key
     plain = PlainKeys()
     names = [plain.stream(Stream(n)) for n in ("orders",)]

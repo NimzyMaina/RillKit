@@ -40,10 +40,23 @@ def _fields(raw: dict[Any, Any]) -> dict[str, str]:
     return {_text(k): _text(v) for k, v in raw.items()}
 
 
+def _published_ms(msg_id: str) -> Optional[int]:
+    """The millisecond timestamp in a stream entry id (``<ms>-<seq>``), or None."""
+    ms = msg_id.partition("-")[0]
+    return int(ms) if ms.isascii() and ms.isdigit() else None
+
+
 # The data-plane rules, as pure functions so the conformance vectors can test them
 # (spec/conformance/data_plane.json). Every SDK must compute the same values.
 
 DLQ_ERROR_LIMIT = 1000
+TRACE_TTL_SECONDS = 3600
+TRACE_MAX_RECORDS = 1000
+
+
+def entry_size(fields: dict[str, str]) -> int:
+    """The size of a stream entry in bytes: its field names and values, UTF-8 encoded."""
+    return sum(len(k.encode()) + len(v.encode()) for k, v in fields.items())
 
 
 def lane_consumer_name(consumer: str, index: int) -> str:
@@ -63,6 +76,12 @@ def retry_wait_ms(
 def retries_exhausted(max_retries: Optional[int], deliveries: int) -> bool:
     """Whether a message delivered ``deliveries`` times has no retries left (None: unlimited)."""
     return max_retries is not None and deliveries > max_retries
+
+
+def queue_wait_ms(published_ms: float, started_ms: float) -> float:
+    """How long a message waited between being published and its handler starting, in
+    milliseconds (data-plane 9.1). Never negative: clock skew counts as no wait."""
+    return max(0.0, started_ms - published_ms)
 
 
 def dead_letter_entry(
@@ -159,6 +178,8 @@ class Subscriber:
         self.consumer = consumer or f"{stream.group}-{socket.gethostname()}-{os.getpid()}"
         self.heartbeat = heartbeat
         self.heartbeat_ttl = heartbeat_ttl
+        # per consumer (lane) name -> monotonic time of the last heartbeat write
+        self._last_beat: dict[str, float] = {}
         self.group_start_id = group_start_id
         self.concurrency = concurrency
         self._plan = _plan(handler)
@@ -173,6 +194,15 @@ class Subscriber:
         self._counter_lock = threading.Lock()
         self.in_flight = 0
         self.processed = 0
+        # counters since start, reported in telemetry (spec 5.1): each handler run counts once
+        self.succeeded_total = 0
+        self.failed_total = 0
+        self.dead_lettered_total = 0
+        self.bytes_total = 0
+        # attempt timings since start (data-plane 9.1): milliseconds, reported in telemetry
+        self.attempts_total = 0
+        self.wait_ms_total = 0.0
+        self.work_ms_total = 0.0
 
     @property
     def client(self) -> Client:
@@ -311,6 +341,8 @@ class Subscriber:
     def _unregister(self, consumer: str) -> None:
         if not self.heartbeat:
             return
+        with self._counter_lock:
+            self._last_beat.pop(consumer, None)
         try:
             pipe = self.client.pipeline(transaction=False)
             pipe.delete(self.broker.keys.heartbeat(self.stream, self.group, consumer))
@@ -370,6 +402,15 @@ class Subscriber:
         if not self.heartbeat:
             return
         consumer = consumer or self.consumer
+        mono = time.monotonic()
+        # Heartbeat writes are 3 Redis commands, so coalesce them: often enough to stay alive,
+        # never once per message. With the default TTL of 60 s that is one write every 5 s.
+        interval = min(5.0, max(0.5, self.heartbeat_ttl / 3))
+        with self._counter_lock:
+            last = self._last_beat.get(consumer)
+            if last is not None and mono < last + interval:
+                return
+            self._last_beat[consumer] = mono
         now = time.time()
         try:
             pipe = self.client.pipeline(transaction=False)
@@ -472,24 +513,57 @@ class Subscriber:
         return call
 
     def _process(self, msg: Message) -> None:
+        control = self.broker.control
         with self._counter_lock:
             self.in_flight += 1
+        ok = dead = False
+        timing: Optional[tuple[float, float, float]] = None
         try:
-            self._handle(msg)
+            ok, dead, timing = self._handle(msg)
         finally:
+            size = entry_size(msg.raw)
             with self._counter_lock:
                 self.in_flight -= 1
                 self.processed += 1
+                self.bytes_total += size
+                if ok:
+                    self.succeeded_total += 1
+                else:
+                    self.failed_total += 1
+                if timing is not None:
+                    self.attempts_total += 1
+                    self.wait_ms_total += timing[2]
+                    self.work_ms_total += timing[1]
+            if control is not None and control.settings.trace_records:
+                self._trace_record(msg, timing, ok, dead)
 
-    def _handle(self, msg: Message) -> None:
+    def _handle(self, msg: Message) -> tuple[bool, bool, Optional[tuple[float, float, float]]]:
+        """Run the message through middleware and the handler.
+
+        Returns ``(ok, dead_lettered, timing)``. ``ok`` is True if the handler finished without
+        raising and the message was acknowledged, not nacked or rejected. ``dead_lettered`` is
+        True if this attempt moved the message to the DLQ. ``timing`` is ``(started_at_seconds,
+        work_ms, wait_ms)`` while a control plane is on, else None (data-plane 9.1)."""
+        control = self.broker.control
+        started_wall = 0.0
+        work_ms = 0.0
         policy = self.ack_policy
         exc: Optional[BaseException] = None
+        dead = False
         if policy is AckPolicy.ACK_FIRST:
             msg.ack()
         try:
-            for mw in self.middlewares:
-                mw.on_receive(msg)
-            self._chain()(msg)
+            # Time the handler itself, not the acknowledgement: a slow Redis must not look like
+            # a slow handler on the bottleneck chart.
+            try:
+                started_wall = time.time() if control is not None else 0.0
+                handler_started = time.monotonic() if control is not None else 0.0
+                for mw in self.middlewares:
+                    mw.on_receive(msg)
+                self._chain()(msg)
+            finally:
+                if control is not None:
+                    work_ms = (time.monotonic() - handler_started) * 1000
         except AckMessage:
             msg.ack()
         except NackMessage as e:
@@ -501,6 +575,7 @@ class Subscriber:
         except DecodeError as e:
             log.error("message %s cannot be decoded, sending to DLQ: %s", msg.id, e)
             exc = e
+            dead = True
             self._dead_letter(msg, str(e))
         except Exception as e:
             log.error("handler failed for message %s (delivery %s): %s", msg.id, msg.deliveries, e)
@@ -517,13 +592,63 @@ class Subscriber:
             if auto_ack and not msg.nacked and not msg.rejected:
                 msg.ack()
 
+        timing: Optional[tuple[float, float, float]] = None
+        if control is not None:
+            published = _published_ms(msg.id)
+            wait_ms = 0.0 if published is None else queue_wait_ms(published, started_wall * 1000)
+            timing = (started_wall, work_ms, wait_ms)
+
         if msg.rejected:
             reason = msg.reject_reason or (str(exc) or type(exc).__name__ if exc else "rejected")
+            dead = True
             self._dead_letter(msg, reason)
         elif msg.nacked and not msg.acked and self._exhausted(msg.deliveries):
+            dead = True
             self._dead_letter(msg, (str(exc) or type(exc).__name__) if exc else "nacked")
         self._after(msg, exc)
         self._beat(msg.consumer)
+        ok = exc is None and msg.acked and not msg.rejected
+        return ok, dead, timing
+
+    def _trace_record(self, msg: Message, timing: Optional[tuple[float, float, float]],
+                      ok: bool, dead: bool) -> None:
+        """Append this attempt to the trace key (data-plane 9.2). A failure here is logged and
+        never fails or retries the message."""
+        if timing is None:
+            return
+        try:
+            from . import tracing
+
+            parent = tracing.parse_traceparent(msg.raw.get(tracing.FIELD))
+            span = tracing.parse_traceparent(msg.traceparent)
+            control = self.broker.control
+            if parent is None or span is None or control is None:
+                return
+            started_wall, work_ms, _ = timing
+            started_ms = int(round(started_wall * 1000))
+            published = _published_ms(msg.id)
+            record = {
+                "trace_id": span.trace_id,
+                "span_id": span.span_id,
+                "parent_span_id": parent.span_id,
+                "stream": self.stream.name,
+                "group": self.group,
+                "message_id": msg.id,
+                "consumer": msg.consumer,
+                "node_id": control.node_id,
+                "delivery": str(max(1, msg.deliveries)),
+                "published_at": str(started_ms if published is None else published),
+                "started_at": str(started_ms),
+                "finished_at": str(started_ms + int(round(work_ms))),
+                "outcome": "dead_letter" if dead else ("ok" if ok else "error"),
+            }
+            key = self.broker.keys.trace(span.trace_id)
+            pipe = self.client.pipeline(transaction=False)
+            pipe.xadd(key, record, maxlen=TRACE_MAX_RECORDS, approximate=True)
+            pipe.expire(key, TRACE_TTL_SECONDS)
+            pipe.execute()
+        except Exception as e:
+            log.debug("could not write the trace record for message %s: %s", msg.id, e)
 
     def _after(self, msg: Message, exc: Optional[BaseException]) -> None:
         for mw in self.middlewares:
@@ -539,6 +664,8 @@ class Subscriber:
         cluster). Otherwise the copy runs first: if the ack then fails the message stays pending,
         is retried and can reach the DLQ twice, but it is never lost.
         """
+        with self._counter_lock:
+            self.dead_lettered_total += 1
         log.warning("moving message %s to %s: %s", msg.id, self.dlq_key, error)
         entry: dict[Any, Any] = dead_letter_entry(
             msg.raw, msg.id, self.stream.name, self.group, error, msg.deliveries

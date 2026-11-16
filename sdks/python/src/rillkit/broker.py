@@ -3,12 +3,12 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from .ack import AckPolicy
-from .clients import CLIENT_ERRORS, Client, is_cluster, run_together
+from .clients import CLIENT_ERRORS, RESPONSE_ERRORS, Client, is_cluster, run_together
 from .config import Control
 from .consumer import Subscriber, _text, replay_entry
 from .exceptions import ConfigurationError, PublishError
@@ -78,10 +78,12 @@ class Broker:
         if control is None:
             control = Control.from_env()
         if control.mode == "relay":
-            raise ConfigurationError(
-                "control mode 'relay' needs the Relay client, which this version of rillkit does "
-                "not include yet; use mode 'valkey' with a control plane that writes to the server"
-            )
+            try:
+                import websockets.sync.client  # noqa: F401
+            except ImportError as e:
+                raise ConfigurationError(
+                    'control mode "relay" needs the Relay client: pip install "rillkit[control]"'
+                ) from e
         if client is None:
             settings = settings or Settings(url=url)
             client = settings.client()
@@ -202,16 +204,68 @@ class Broker:
         return call(cmd)
 
     def _xadd(self, cmd: PublishCommand) -> str:
+        key, fields = self._entry(cmd)
         try:
-            payload = cmd.stream.codec.encode(cmd.body)
-            fields: dict[Any, Any] = {"data": payload, **cmd.headers}
             entry_id = self.client.xadd(
-                self.keys.stream(cmd.stream), fields, maxlen=cmd.maxlen,
-                approximate=cmd.approximate,
+                key, fields, maxlen=cmd.maxlen, approximate=cmd.approximate,
             )
         except CLIENT_ERRORS + (TypeError, ValueError) as e:
             raise PublishError(f"could not publish to {cmd.stream.name}: {e}") from e
         return _text(entry_id)
+
+    def _entry(self, cmd: PublishCommand) -> tuple[str, dict[Any, Any]]:
+        """The physical key and encoded fields of one command (what ``XADD`` receives)."""
+        try:
+            payload = cmd.stream.codec.encode(cmd.body)
+            fields: dict[Any, Any] = {"data": payload, **cmd.headers}
+        except (TypeError, ValueError) as e:
+            raise PublishError(f"could not publish to {cmd.stream.name}: {e}") from e
+        return self.keys.stream(cmd.stream), fields
+
+    def publish_many(
+        self,
+        stream: StreamLike,
+        bodies: Iterable[Any],
+        *,
+        maxlen: Optional[int] = None,
+        approximate: bool = True,
+    ) -> list[str]:
+        """Add several entries in one pipeline and return their ids, in the order given.
+
+        Every middleware's ``publish_scope`` runs for every body, so ``TraceContext`` still gives
+        each entry its own ``traceparent`` (same trace, its own span), and other headers are set
+        per entry. Only the writes are batched: one network round trip instead of one per message.
+        The entries are encoded before the pipeline runs, so an encoding error publishes nothing.
+
+        Middleware sees ``""`` as the entry id inside ``publish_scope`` during a batch; ids only
+        exist after the pipeline. The built-in middleware does not use that value. A failed
+        pipeline raises ``PublishError``; the commands may have reached Redis.
+        """
+        resolved = as_stream(stream)
+        entries: list[tuple[str, dict[Any, Any], Optional[int], bool]] = []
+
+        def collect(cmd: PublishCommand) -> str:
+            key, fields = self._entry(cmd)
+            entries.append((key, fields, cmd.maxlen, cmd.approximate))
+            return ""
+
+        call: Callable[[PublishCommand], str] = collect
+        for mw in reversed(self.middlewares):
+            call = partial(mw.publish_scope, call)
+        for body in bodies:
+            call(PublishCommand(
+                resolved, body, maxlen if maxlen is not None else resolved.maxlen, approximate
+            ))
+        if not entries:
+            return []
+        pipe = self.client.pipeline(transaction=False)
+        for key, fields, entry_maxlen, entry_approximate in entries:
+            pipe.xadd(key, fields, maxlen=entry_maxlen, approximate=entry_approximate)
+        try:
+            ids = pipe.execute()
+        except CLIENT_ERRORS + (TypeError, ValueError) as e:
+            raise PublishError(f"could not publish to {resolved.name}: {e}") from e
+        return [_text(entry_id) for entry_id in ids]
 
     # lifecycle hooks
 
@@ -342,3 +396,53 @@ class Broker:
             )
             moved += 1
         return moved
+
+    def replay_dlq_entries(
+        self, stream: StreamLike, ids: Sequence[str], data: Optional[dict[str, str]] = None,
+    ) -> tuple[int, list[str]]:
+        """Move the DLQ entries ``ids`` back onto the stream, each as one transaction where the
+        keys allow it (see ``replay_dlq``). ``data`` replaces the ``data`` field of the entries
+        it names, to fix a payload before it is handled again. Returns how many were moved and
+        the ids that were not in the DLQ."""
+        s = as_stream(stream)
+        stream_key, dlq_key = self.keys.stream(s), self.keys.dlq(s)
+        data = data or {}
+        moved, missing = 0, []
+        for entry_id in ids:
+            rows: Any = self.client.xrange(dlq_key, entry_id, entry_id)
+            if not rows:
+                missing.append(entry_id)
+                continue
+            fields: dict[Any, Any] = replay_entry({_text(k): _text(v)
+                                                   for k, v in rows[0][1].items()})
+            if entry_id in data:
+                fields["data"] = data[entry_id]
+            run_together(
+                self.client, [("xadd", (stream_key, fields)), ("xdel", (dlq_key, entry_id))]
+            )
+            moved += 1
+        return moved, missing
+
+    def delete_dlq_entries(self, stream: StreamLike, ids: Sequence[str]) -> int:
+        """Delete the DLQ entries ``ids``. Returns how many existed."""
+        return int(self.client.xdel(self.keys.dlq(as_stream(stream)), *ids))
+
+    def purge_dlq(self, stream: StreamLike) -> int:
+        """Delete the whole DLQ of ``stream``. Returns how many entries it held."""
+        key = self.keys.dlq(as_stream(stream))
+        count = int(self.client.xlen(key))
+        self.client.delete(key)
+        return count
+
+    def create_group(self, stream: StreamLike, group: str, start: str = "$") -> bool:
+        """Create ``stream`` (if needed) and its consumer group ``group``, starting at ``start``:
+        ``$`` for new messages only, ``0`` for everything already in the stream. Returns False
+        if the group already existed."""
+        try:
+            self.client.xgroup_create(self.keys.stream(as_stream(stream)), group, id=start,
+                                      mkstream=True)
+        except RESPONSE_ERRORS as e:
+            if "BUSYGROUP" not in str(e):
+                raise
+            return False
+        return True

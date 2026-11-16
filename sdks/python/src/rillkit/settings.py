@@ -51,11 +51,17 @@ class Settings:
     """Connection settings: which server, which client library, and how to connect.
 
     ``Settings.from_env()`` reads RILLKIT_URL, or RILLKIT_HOST/PORT/DB/USERNAME/PASSWORD/SSL,
-    plus RILLKIT_SOCKET_TIMEOUT (seconds, or ``none``), RILLKIT_BACKEND, RILLKIT_MODE,
-    RILLKIT_CLUSTER_NODES, RILLKIT_KEY_LAYOUT, RILLKIT_KEY_PREFIX and RILLKIT_TENANT. Each
-    connection variable falls back to its REDIS_ name (REDIS_URL, REDIS_HOST, ...), so 0.1
+    plus RILLKIT_SOCKET_TIMEOUT (seconds, or ``none``), RILLKIT_MAX_CONNECTIONS, RILLKIT_BACKEND,
+    RILLKIT_MODE, RILLKIT_CLUSTER_NODES, RILLKIT_KEY_LAYOUT, RILLKIT_KEY_PREFIX and RILLKIT_TENANT.
+    Each connection variable falls back to its REDIS_ name (REDIS_URL, REDIS_HOST, ...), so 0.1
     configurations keep working. A config file (``config=`` or RILLKIT_CONFIG) fills in whatever
     the environment does not set.
+
+    ``max_connections`` caps the client's connection pool. redis-py 8 defaults that pool to 100,
+    which a producer with many threads, or a consumer with more than 100 lanes, can exhaust:
+    the next command then fails with ``Too many connections`` instead of waiting. Raise it to
+    the peak number of concurrent commands plus headroom (``RILLKIT_MAX_CONNECTIONS``). Leave it
+    None to use the client library's own default (valkey-py's is effectively unlimited).
 
     ``tenant`` (and ``key_prefix``) imply hash-tagged keys, ``HashTagKeys(prefix, tenant)`` with
     the default prefix ``rk``; combining either with ``key_layout="plain"`` is an error.
@@ -75,6 +81,7 @@ class Settings:
     password: Optional[str] = None
     ssl: bool = False
     socket_timeout: Optional[float] = 15.0
+    max_connections: Optional[int] = None
     backend: str = "redis"
     mode: str = "standalone"
     username: Optional[str] = None
@@ -93,6 +100,14 @@ class Settings:
             )
         if self.mode not in MODES:
             raise ConfigurationError(f"unknown mode {self.mode!r}, expected one of {MODES}")
+        if self.max_connections is not None:
+            if (isinstance(self.max_connections, bool)
+                    or not isinstance(self.max_connections, int) or self.max_connections < 1):
+                raise ConfigurationError("max_connections must be a positive integer or None")
+            if "max_connections" in self.client_kwargs:
+                raise ConfigurationError(
+                    "set max_connections on Settings, not in client_kwargs"
+                )
         if self.key_layout is not None and self.key_layout not in KEY_LAYOUTS:
             raise ConfigurationError(
                 f"unknown key_layout {self.key_layout!r}, expected one of {KEY_LAYOUTS}"
@@ -153,6 +168,7 @@ class Settings:
         ssl = get("SSL", "")
         nodes = env.get("RILLKIT_CLUSTER_NODES") or file.get("cluster_nodes")
         timeout = get("SOCKET_TIMEOUT")
+        max_connections = get("MAX_CONNECTIONS")
         values: dict[str, Any] = {
             "url": url,
             "host": get("HOST", "localhost"),
@@ -163,6 +179,10 @@ class Settings:
             "ssl": ssl if isinstance(ssl, bool) else (ssl or "").lower() in ("1", "true", "yes"),
             "socket_timeout": (timeout if isinstance(timeout, (int, float))
                                else _seconds(timeout, 15.0)),
+            "max_connections": (
+                int(max_connections) if isinstance(max_connections, str) and max_connections
+                else max_connections if isinstance(max_connections, int) else None
+            ),
             "backend": env.get("RILLKIT_BACKEND") or file.get("backend") or "redis",
             "mode": env.get("RILLKIT_MODE") or file.get("mode") or "standalone",
             "cluster_nodes": nodes if isinstance(nodes, (list, tuple)) else _nodes(nodes),

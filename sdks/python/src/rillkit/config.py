@@ -38,13 +38,15 @@ _FIELDS: dict[str, dict[str, str]] = {
     "connection": {
         "url": "url", "host": "host", "port": "port", "db": "db", "username": "username",
         "password": "password", "ssl": "ssl", "socket_timeout": "socket_timeout",
+        "max_connections": "max_connections",
         "backend": "backend", "mode": "mode", "cluster_nodes": "cluster_nodes",
     },
     "keys": {"layout": "key_layout", "prefix": "key_prefix", "tenant": "tenant"},
     "control": {
         "mode": "mode", "url": "url", "api_key": "api_key", "node_id": "node_id",
         "heartbeat_interval": "heartbeat_interval", "refresh_interval": "refresh_interval",
-        "capture_logs": "capture_logs",
+        "capture_logs": "capture_logs", "insecure": "insecure",
+        "inspect_messages": "inspect_messages", "trace_records": "trace_records",
     },
 }
 _SECRETS = {"password", "api_key"}
@@ -168,8 +170,8 @@ class Control:
     - ``valkey``: before polling, the worker reads its desired state from the control keys and
       then listens on the control channels for changes. Something with access to the server
       (``rillkit-server``, or ``broker.control.apply(...)``) writes the state.
-    - ``relay``: ``valkey`` plus an outbound connection to ``url`` with ``api_key``. The Relay
-      client ships in a later release; this release refuses to start in ``relay`` mode.
+    - ``relay``: ``valkey`` plus an outbound Relay connection to ``url`` (``rillkit-server``)
+      with ``api_key``: telemetry up, directives down. Needs ``pip install "rillkit[control]"``.
 
     ``node_id`` names this process (default ``<hostname>-<pid>``). ``heartbeat_interval`` is how
     often the node heartbeat is written, ``refresh_interval`` how often the desired state is
@@ -179,8 +181,22 @@ class Control:
     Redis or Valkey for a day (exception text excluded). It is off by default because handler
     logs often contain message data; add ``LogCapture(...)`` yourself to filter or redact.
 
+    ``inspect_messages`` lets the control plane read message payloads and DLQ error texts, to
+    show them on the dashboard and to edit DLQ entries before replaying them. Off by default:
+    the dashboard then sees ids, sizes, delivery status and trace ids, never the contents.
+
+    ``trace_records`` keeps one small entry per handler attempt in the trace key of the message's
+    trace id (kept for an hour), so the dashboard can draw the trace across every stream it
+    touched. It stores ids, timestamps, stream and group, consumer, node and outcome — never a
+    payload or exception text. Off by default because it writes a key per trace.
+
+    The Relay ``url`` must use ``wss://`` (or ``https://``). ``ws://`` is accepted for a loopback
+    host, or anywhere with ``insecure=True``, which sends the API key unencrypted: only for a
+    private network such as a local Docker Compose setup.
+
     ``Control.from_env()`` reads RILLKIT_CONTROL, RILLKIT_CONTROL_URL, RILLKIT_API_KEY,
-    RILLKIT_NODE_ID and RILLKIT_CAPTURE_LOGS, over the ``[control]`` section of the config file.
+    RILLKIT_NODE_ID, RILLKIT_CAPTURE_LOGS, RILLKIT_INSPECT_MESSAGES, RILLKIT_TRACE_RECORDS and
+    RILLKIT_CONTROL_INSECURE, over the ``[control]`` section of the config file.
     """
 
     mode: str = "off"
@@ -190,6 +206,9 @@ class Control:
     heartbeat_interval: float = 10.0
     refresh_interval: float = 30.0
     capture_logs: bool = False
+    insecure: bool = False
+    inspect_messages: bool = False
+    trace_records: bool = False
 
     def __post_init__(self) -> None:
         self.mode = str(self.mode).strip().lower()
@@ -199,8 +218,10 @@ class Control:
             )
         if self.node_id is not None and not self.node_id:
             raise ConfigurationError("node_id must be a non-empty string or None")
-        if isinstance(self.capture_logs, str):
-            self.capture_logs = self.capture_logs.strip().lower() in ("1", "true", "yes", "on")
+        for name in ("capture_logs", "insecure", "inspect_messages", "trace_records"):
+            value = getattr(self, name)
+            if isinstance(value, str):
+                setattr(self, name, value.strip().lower() in ("1", "true", "yes", "on"))
         if self.heartbeat_interval <= 0 or self.refresh_interval <= 0:
             raise ConfigurationError("control intervals must be positive")
         if self.mode == "relay":
@@ -208,7 +229,15 @@ class Control:
                 raise ConfigurationError("control mode 'relay' needs a url (RILLKIT_CONTROL_URL)")
             if not self.api_key:
                 raise ConfigurationError("control mode 'relay' needs an api_key (RILLKIT_API_KEY)")
-            if urlparse(self.url).scheme not in ("wss", "https"):
+            parsed = urlparse(self.url)
+            if parsed.scheme in ("ws", "http"):
+                loopback = parsed.hostname in ("localhost", "127.0.0.1", "::1")
+                if not (loopback or self.insecure):
+                    raise ConfigurationError(
+                        "the control url must use wss:// or https://; ws:// is only allowed for "
+                        "localhost, or with insecure=True (RILLKIT_CONTROL_INSECURE=1)"
+                    )
+            elif parsed.scheme not in ("wss", "https"):
                 raise ConfigurationError("the control url must use wss:// or https://")
 
     @property
@@ -225,7 +254,10 @@ class Control:
         env = os.environ
         for var, name in (("RILLKIT_CONTROL", "mode"), ("RILLKIT_CONTROL_URL", "url"),
                           ("RILLKIT_API_KEY", "api_key"), ("RILLKIT_NODE_ID", "node_id"),
-                          ("RILLKIT_CAPTURE_LOGS", "capture_logs")):
+                          ("RILLKIT_CAPTURE_LOGS", "capture_logs"),
+                          ("RILLKIT_CONTROL_INSECURE", "insecure"),
+                          ("RILLKIT_INSPECT_MESSAGES", "inspect_messages"),
+                          ("RILLKIT_TRACE_RECORDS", "trace_records")):
             if env.get(var):
                 values[name] = env[var]
         values.update(overrides)

@@ -234,6 +234,23 @@ def test_heartbeat_ttl_is_configurable(broker: Broker, r, name):
     assert r.ttl(hk(name, "g", "w")) <= 5
 
 
+def test_heartbeats_are_coalesced_not_written_per_message(broker: Broker, r, name):
+    @broker.subscribe(name, group="g", consumer="w", heartbeat_ttl=60, **fast())
+    def handle(body): ...
+
+    broker.start()
+    assert wait_until(lambda: r.exists(hk(name, "g", "w")))
+    for n in range(40):
+        broker.publish(name, {"n": n})
+    assert wait_until(lambda: pending(r, name) == 0 and read_count(r, name) == 40)
+    sub = broker.subscribers[0]
+    # One lane, forty messages inside five seconds: a heartbeat per message would leave 40
+    # writes; the time-based refresh leaves the one from the start of the loop.
+    assert len(sub._last_beat) == 1
+    broker.stop(timeout=5)
+    assert sub._last_beat == {}  # retired lanes forget their schedule
+
+
 def test_heartbeat_disabled(broker: Broker, r, name):
     @broker.subscribe(name, group="g", consumer="w", heartbeat=False, **fast())
     def handle(msg: Message): ...

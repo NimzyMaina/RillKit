@@ -6,7 +6,8 @@ from helpers import BACKEND
 from rillkit import Broker, ConfigurationError, HashTagKeys, PlainKeys, Settings
 
 KEYS = ["URL", "HOST", "PORT", "DB", "USERNAME", "PASSWORD", "SSL", "SOCKET_TIMEOUT"]
-RILLKIT_KEYS = ["URL", "BACKEND", "MODE", "CLUSTER_NODES", "KEY_LAYOUT"] + KEYS[1:]
+RILLKIT_KEYS = ["URL", "BACKEND", "MODE", "CLUSTER_NODES", "KEY_LAYOUT", "MAX_CONNECTIONS"]
+RILLKIT_KEYS += KEYS[1:]
 
 
 @pytest.fixture(autouse=True)
@@ -310,6 +311,26 @@ def test_client_kwargs_reach_a_client_built_without_url():
     assert client.connection_pool.max_connections == 7
     assert client.connection_pool.connection_kwargs["decode_responses"] is True
     client.close()
+
+
+def test_max_connections_is_a_setting(monkeypatch):
+    client = Settings(max_connections=250).client()
+    try:
+        assert client.connection_pool.max_connections == 250
+    finally:
+        client.close()
+    assert "max_connections=250" in repr(Settings(max_connections=250))
+
+    with pytest.raises(ConfigurationError, match="positive integer"):
+        Settings(max_connections=0)
+    with pytest.raises(ConfigurationError, match="positive integer"):
+        Settings(max_connections=True)
+    with pytest.raises(ConfigurationError, match="not in client_kwargs"):
+        Settings(max_connections=10, client_kwargs={"max_connections": 10})
+
+    monkeypatch.setenv("RILLKIT_MAX_CONNECTIONS", "123")
+    assert Settings.from_env().max_connections == 123
+    assert Settings.from_env(max_connections=321).max_connections == 321  # code wins
 
 
 @pytest.mark.parametrize("backend", ["redis", "valkey"])
