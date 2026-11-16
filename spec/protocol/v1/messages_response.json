@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/messages_response.json",
+  "title": "MESSAGES_RESPONSE: a worker's answer to MESSAGES_REQUEST (spec 5.4)",
+  "type": "object",
+  "required": [
+    "type",
+    "request_id",
+    "messages",
+    "next_before",
+    "total",
+    "payloads",
+    "more_after"
+  ],
+  "properties": {
+    "type": {
+      "const": "MESSAGES_RESPONSE"
+    },
+    "request_id": {
+      "$ref": "common.json#/$defs/nonEmptyString"
+    },
+    "messages": {
+      "description": "Newest first.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "size",
+          "fields",
+          "traceparent"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fields": {
+            "description": "The entry without x- fields; null unless the worker allows inspect_messages.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "traceparent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "waiting",
+              "pending",
+              "acked"
+            ]
+          },
+          "deliveries": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "consumer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "idle_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "dead_letter": {
+            "type": "object",
+            "required": [
+              "original_id",
+              "stream",
+              "group",
+              "deliveries",
+              "error"
+            ],
+            "properties": {
+              "original_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stream": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "group": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "deliveries": {
+                "type": "integer"
+              },
+              "error": {
+                "description": "null unless the worker allows inspect_messages.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "next_before": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "payloads": {
+      "description": "Whether fields and errors are included (inspect_messages).",
+      "type": "boolean"
+    },
+    "error": {
+      "type": "string"
+    },
+    "more_after": {
+      "description": "With after: more new entries than count arrived.",
+      "type": "boolean"
+    },
+    "as_of": {
+      "description": "When the worker read the page, ISO 8601.",
+      "type": "string"
+    }
+  }
+}

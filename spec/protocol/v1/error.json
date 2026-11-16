@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/error.json",
+  "title": "ERROR: the server refuses or ends a Relay session (spec 5.4)",
+  "description": "Sent just before the server closes the connection with the matching close code.",
+  "type": "object",
+  "required": ["type", "code", "message"],
+  "properties": {
+    "type": {"const": "ERROR"},
+    "code": {
+      "description": "UNAUTHORIZED (close 4001): missing, unknown or revoked API key. TENANT_MISMATCH (4003): the HELLO keys do not match the key's tenant. UNSUPPORTED_VERSION (4006). BAD_FRAME (4400): a frame was not valid. REPLACED (4009): the same node id connected again.",
+      "enum": ["UNAUTHORIZED", "TENANT_MISMATCH", "UNSUPPORTED_VERSION", "BAD_FRAME", "REPLACED"]
+    },
+    "message": {"type": "string"}
+  }
+}

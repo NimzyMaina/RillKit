@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/trace_response.json",
+  "title": "TRACE_RESPONSE: a worker's answer to TRACE_REQUEST (spec 5.4)",
+  "type": "object",
+  "required": ["type", "request_id", "trace_id", "records"],
+  "properties": {
+    "type": {"const": "TRACE_RESPONSE"},
+    "request_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+    "trace_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "records": {
+      "description": "Oldest first; empty when the worker keeps no trace records or the key expired. Metadata only: never payloads or exception text.",
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "trace_id",
+          "span_id",
+          "parent_span_id",
+          "stream",
+          "group",
+          "message_id",
+          "consumer",
+          "node_id",
+          "delivery",
+          "published_at",
+          "started_at",
+          "finished_at",
+          "outcome"
+        ],
+        "properties": {
+          "trace_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+          "span_id": {
+            "description": "The handler attempt's span id.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "parent_span_id": {
+            "description": "The span id in the entry's traceparent, i.e. the publisher's span.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "stream": {"$ref": "common.json#/$defs/nonEmptyString"},
+          "group": {"$ref": "common.json#/$defs/nonEmptyString"},
+          "message_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+          "consumer": {"$ref": "common.json#/$defs/nonEmptyString"},
+          "node_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+          "delivery": {
+            "description": "Delivery number of this attempt (1 for the first).",
+            "type": "integer",
+            "minimum": 1
+          },
+          "published_at": {
+            "description": "When the entry was added, in epoch milliseconds (from the entry id).",
+            "type": "integer",
+            "minimum": 0
+          },
+          "started_at": {"type": "integer", "minimum": 0},
+          "started_us": {
+            "description": "Optional epoch microseconds for started_at; orders attempts that start in the same millisecond.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "finished_at": {"type": "integer", "minimum": 0},
+          "outcome": {"enum": ["ok", "error", "dead_letter"]}
+        }
+      }
+    },
+    "error": {"type": "string"}
+  }
+}

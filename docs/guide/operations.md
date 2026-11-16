@@ -1,8 +1,10 @@
 # Operations
 
+Everything on this page works with the library alone, from code or `redis-cli`. With the [control plane](/guide/server), the [dashboard](/guide/dashboard) shows the same information live (workers, lag, pending, the DLQ, throughput) and lets you pause, drain, scale and replay from the browser. Measured throughput and latency are on [Performance](/guide/performance).
+
 ## Heartbeat and active_workers
 
-Every consumer writes a heartbeat key, `rillkit:workers:<stream>:<group>:<consumer>` (or `rk:{<stream>}:workers:<group>:<consumer>` with [hash-tagged keys](/guide/keys); `broker.keys.heartbeat(...)` gives the exact name), with a time-to-live of `heartbeat_ttl` seconds (default 60). It is refreshed at the top of every loop and after every message, and deleted on a clean shutdown. A worker that crashes simply stops refreshing it and drops off after the TTL. Each refresh also records the worker in the stream and group's [consumer registry](/guide/keys#where-the-group-and-worker-name-appear) (`rillkit:consumers:<stream>:<group>`), a sorted set scored by when the heartbeat expires.
+Every consumer writes a heartbeat key, `rillkit:workers:<stream>:<group>:<consumer>` (or `rk:{<stream>}:workers:<group>:<consumer>` with [hash-tagged keys](/guide/keys); `broker.keys.heartbeat(...)` gives the exact name), with a time-to-live of `heartbeat_ttl` seconds (default 60). It is refreshed at the top of the loop and after messages, coalesced to at most once every `min(5 s, max(0.5 s, heartbeat_ttl / 3))` (5 s at the default TTL), and deleted on a clean shutdown. A worker that crashes simply stops refreshing it and drops off after the TTL. Each refresh also records the worker in the stream and group's [consumer registry](/guide/keys#where-the-group-and-worker-name-appear) (`rillkit:consumers:<stream>:<group>`), a sorted set scored by when the heartbeat expires.
 
 ```python
 broker.active_workers("orders", group="billing")   # ['billing-web1-4242', 'billing-web2-977']
@@ -46,14 +48,14 @@ after stop: []
 ```
 
 ::: warning Long handlers and the heartbeat
-The heartbeat is refreshed between messages, not during a handler. A handler that runs longer than `heartbeat_ttl` makes a busy, healthy worker look gone. Set `heartbeat_ttl` above your longest handler, or pass `heartbeat=False` to turn the feature off.
+The heartbeat is refreshed between messages, not during a handler, and at most once every `min(5 s, max(0.5 s, heartbeat_ttl / 3))`. A handler that runs longer than `heartbeat_ttl` makes a busy, healthy worker look gone. Set `heartbeat_ttl` above your longest handler, or pass `heartbeat=False` to turn the feature off.
 :::
 
 ## Scaling
 
-- One subscription is one thread, processing one message at a time.
-- Scale by running more worker processes in the same group (see [Lifecycle](/guide/lifecycle#running-several-worker-processes)), or by adding more `@broker.subscribe` handlers on different streams.
-- The server spreads new entries over the consumers in the group, so throughput rises with the number of workers. Ordering across workers is not guaranteed.
+- One lane is one thread, processing one message at a time. A subscription runs `concurrency` lanes (default 1).
+- Scale by raising `concurrency` on the subscription, running more worker processes in the same group (see [Lifecycle](/guide/lifecycle#running-several-worker-processes)), or adding more `@broker.subscribe` handlers on different streams.
+- The server spreads new entries over the consumers in the group, so throughput rises with the number of lanes and workers. Ordering across lanes and workers is not guaranteed.
 - Keep an eye on `count`: a larger batch means a worker holds more entries pending at a time, and on shutdown the unprocessed part of a batch waits for `claim_idle_ms`.
 
 ## Claim tuning
@@ -135,14 +137,22 @@ $ redis-cli --scan --pattern 'rillkit:workers:*'
 rillkit:workers:tasks:workers:w1
 ```
 
-What to watch:
+### What to watch
 
 | Signal | Meaning |
 | --- | --- |
 | `lag` in `XINFO GROUPS` keeps growing | consumers are not keeping up or are down |
 | `pending` stays high, `idle` is large | handlers are stuck or messages keep failing |
 | `XPENDING` deliveries count rising | a message is being retried |
+| `XLEN <stream>` growing without bound | producers are outrunning consumers; cap it with `maxlen` or add workers |
 | `XLEN <stream>-dlq` above zero | something gave up, go and look |
 | `active_workers` smaller than expected | a worker died or its heartbeat expired |
+| `PublishError: Too many connections` | the client pool is too small for the concurrency; raise `max_connections` |
+
+With [`rillkit-server`](/guide/server), `GET /api/metrics` exposes lag, pending, ack rate,
+nodes, workers and pending directives per tenant for Prometheus. It deliberately omits
+per-stream series; use the dashboard or `XINFO` for those. A hot tenant can affect a quiet one
+on a shared Redis or Valkey: there are no per-tenant CPU or memory quotas, so isolate noisy
+tenants with separate servers or clusters.
 
 In the output above, `XPENDING` shows one entry delivered once and owned by `w1`. That is the failed message waiting out `claim_idle_ms`.

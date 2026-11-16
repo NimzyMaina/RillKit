@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/messages_request.json",
+  "title": "MESSAGES_REQUEST: the server asks a worker for a page of a stream's or DLQ's entries (spec 5.4)",
+  "type": "object",
+  "required": [
+    "type",
+    "request_id",
+    "stream",
+    "group"
+  ],
+  "properties": {
+    "type": {
+      "const": "MESSAGES_REQUEST"
+    },
+    "request_id": {
+      "$ref": "common.json#/$defs/nonEmptyString"
+    },
+    "stream": {
+      "$ref": "common.json#/$defs/nonEmptyString"
+    },
+    "group": {
+      "$ref": "common.json#/$defs/nonEmptyString"
+    },
+    "source": {
+      "enum": [
+        "stream",
+        "dlq"
+      ],
+      "default": "stream"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "default": 50
+    },
+    "before": {
+      "description": "Return entries older than this id (exclusive): the next page.",
+      "type": "string",
+      "pattern": "^[0-9]+-[0-9]+$"
+    },
+    "ids": {
+      "description": "Return exactly these entries instead of a page.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "string"
+      }
+    },
+    "after": {
+      "description": "Return only entries newer than this id (exclusive): the oldest count of them, newest first. Not with before.",
+      "type": "string",
+      "pattern": "^[0-9]+-[0-9]+$"
+    }
+  }
+}

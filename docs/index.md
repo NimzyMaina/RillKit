@@ -3,7 +3,7 @@ layout: page
 pageClass: rill-landing
 title: RillKit
 titleTemplate: Redis and Valkey streams for Python
-description: Publish and consume Redis and Valkey streams in Python, on one server or a cluster, with consumer groups, retries, a dead-letter queue, ack policies and middleware.
+description: Publish and consume Redis and Valkey streams in Python, on one server or a cluster, with consumer groups, retries, a dead-letter queue, ack policies and middleware, plus an optional control plane and dashboard to steer every worker and trace each message across streams.
 ---
 
 <RillHero />
@@ -45,11 +45,9 @@ broker.run()
 </template>
 </RillConnect>
 
+<RillControl />
+
 <RillFlow />
-
-<RillDivider :seed="5" :tone="1" />
-
-<RillRedis />
 
 <RillBefore>
 <template #before>
@@ -94,8 +92,9 @@ broker.run()
 </template>
 </RillBefore>
 
+
 <RillSpec />
 
-<RillDivider :seed="9" :tone="3" />
+<RillRedis />
 
 <RillStart />

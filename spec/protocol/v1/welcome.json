@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/welcome.json",
+  "title": "WELCOME: the server accepts a Relay session (spec 5.4)",
+  "type": "object",
+  "required": ["type", "protocol_version", "tenant_id", "telemetry_interval_sec"],
+  "properties": {
+    "type": {"const": "WELCOME"},
+    "protocol_version": {"description": "The version both sides use from now on.", "type": "integer", "minimum": 1},
+    "tenant_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+    "telemetry_interval_sec": {"type": "number", "exclusiveMinimum": 0}
+  }
+}

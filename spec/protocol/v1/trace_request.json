@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/trace_request.json",
+  "title": "TRACE_REQUEST: the server asks a worker for one trace's records (spec 5.4)",
+  "type": "object",
+  "required": ["type", "request_id", "trace_id"],
+  "properties": {
+    "type": {"const": "TRACE_REQUEST"},
+    "request_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+    "trace_id": {
+      "description": "W3C trace id (32 lowercase hex digits).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    }
+  }
+}

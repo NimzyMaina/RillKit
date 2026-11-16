@@ -1,65 +1,75 @@
 # RillKit
 
-Simple publish and consume for Redis and Valkey streams, standalone or cluster. Consumer groups,
-retries with backoff, a dead-letter queue, ack policies, middleware and lifecycle hooks, without the
-boilerplate.
+Simple publish and consume for Redis and Valkey streams, standalone or cluster: consumer groups,
+retries with backoff, a dead-letter queue, ack policies, middleware, and an optional control
+plane that pauses, drains and scales workers while they run.
 
 **Docs:** https://nimzymaina.github.io/RillKit/
 
-```bash
-pip install rillkit             # plain dict bodies
-pip install "rillkit[pydantic]" # optional typed bodies
-pip install "rillkit[valkey]"   # optional valkey-py client
-```
+## SDKs
 
-```python
-from rillkit import Broker, Stream
-
-orders = Stream("orders", group="workers")
-broker = Broker.from_env()  # RILLKIT_URL, or RILLKIT_HOST/PORT/...; REDIS_* still work
-
-
-@broker.subscribe(orders, max_retries=3)
-def handle(order: dict):
-    print("got", order)
-
-
-if __name__ == "__main__":
-    broker.publish(orders, {"id": 1})
-    broker.run()  # blocks; Ctrl-C / SIGTERM finishes the current message and exits
-```
-
-## Features
-
-- Consumer groups: group creation, `XREADGROUP`, and `XAUTOCLAIM`-style takeover of stuck messages
-- At-least-once delivery with retries (`max_retries`, optional exponential `backoff`)
-- Dead-letter queue with the original id, error and delivery count; `broker.replay_dlq()`
-- `msg.nack()` to retry, `msg.reject()` (or `RejectMessage`) to skip retries and go straight to the DLQ
-- `AckPolicy`: `NACK_ON_ERROR` (default), `ACK_ALWAYS`, `ACK_FIRST`, `MANUAL`
-- Plain dicts by default, Pydantic models when you annotate the handler with one
-- Middleware hooks (`on_receive`, `consume_scope`, `publish_scope`, `after_processed`) and an `Idempotent` middleware
-- `on_startup`, `after_startup`, `on_shutdown`, `after_shutdown` hooks and graceful SIGTERM shutdown
-- Worker heartbeats: `broker.active_workers(stream)` includes idle workers
-- Stack `@broker.publisher(...)` under `@broker.subscribe(...)` to publish a handler's return value
-- The wire format is a single `data` field holding JSON, so plain redis-py or valkey-py producers interoperate
-- Redis or Valkey (`RILLKIT_BACKEND=valkey`), standalone or Cluster (`RILLKIT_MODE=cluster`)
-- Key builders map stream names to keys: the original names on one server, hash-tagged keys on a
-  cluster so a stream and its DLQ share a slot and the move to the DLQ stays a transaction, plus
-  prefixes and tenant ids (`HashTagKeys(prefix="billing", tenant="t-42")`)
-
-## Development
+| Language | Package | Source | Status |
+| --- | --- | --- | --- |
+| Python 3.9+ | [`rillkit`](https://pypi.org/project/rillkit/) | [`sdks/python`](sdks/python) | released |
+| TypeScript / Node.js | `rillkit` on npm | `sdks/typescript` | next |
 
 ```bash
-uv sync --group dev
-REDIS_URL=redis://localhost:6379/15 uv run pytest   # needs a Redis; only db 15 is flushed
-RILLKIT_TEST_BACKEND=valkey REDIS_URL=redis://localhost:6380/15 uv run pytest   # valkey-py
-
-scripts/test-cluster.sh valkey 7101                 # a six-node cluster in Docker
-RILLKIT_TEST_BACKEND=valkey RILLKIT_TEST_MODE=cluster \
-  RILLKIT_TEST_CLUSTER_NODES=127.0.0.1:7101 uv run pytest
-
-npm install && npm run docs:dev                     # docs
-npm run docs:build:versions                         # latest plus a snapshot per release tag
+pip install rillkit
 ```
 
-MIT licensed.
+TypeScript (Node.js, Bun and Deno) is next; Java and .NET are planned. Every SDK follows the same
+[specification](spec), so workers written in different languages can share streams, consumer
+groups, DLQs and a control plane.
+
+## The control plane
+
+`rillkit-server` watches and steers a fleet of workers from a dashboard: live nodes, streams,
+lag and throughput; pause, resume, drain and scale; DLQ replay; autoscaling on arrival rate and
+backlog; each message's logs; and where the bottleneck is, from per-stream queue wait against
+handler time and a per-trace timeline across streams. Workers connect out to it, and keep working
+if it is unreachable. Try it with a demo fleet, no clone needed:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/NimzyMaina/RillKit/main/deploy/demo.yaml
+docker compose -f demo.yaml up -d      # then open http://localhost:8080, token: rillkit-local-admin-token
+```
+
+For a real deployment, the container images are published and [`deploy/`](deploy) has a
+no-clone installer. See [`server/README.md`](server/README.md).
+
+## Repository layout
+
+| Path | What it is |
+| --- | --- |
+| [`spec/`](spec) | The contract every implementation follows: prose rules, JSON Schemas for the control-plane protocol, and conformance test vectors |
+| [`sdks/python/`](sdks/python) | The Python SDK, published to PyPI as `rillkit` |
+| [`server/`](server) | `rillkit-server`: the Relay gateway, directive router, autoscaler and HTTP API (Python, FastAPI, Postgres) |
+| [`deploy/`](deploy) | No-clone deployment: published images, Compose file, installer and external Postgres/Redis notes |
+| [`dashboard/`](dashboard) | The dashboard (React, TypeScript, shadcn/ui), built into the server's image |
+| [`examples/demo/`](examples/demo) and [`compose.yaml`](compose.yaml) | A local control plane with a demo fleet |
+| [`docs/`](docs) | The documentation site (VitePress) |
+| [`bench/`](bench) | Reproducible load tests and their results: data plane, Relay fleet, autoscaler, leader failover, SSE fan-out, batching |
+| [`scripts/`](scripts) | Shared tooling: a throwaway Redis or Valkey Cluster for tests, the versioned docs build |
+| [`.github/workflows/`](.github/workflows) | One workflow per component, triggered by changes under its paths |
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It is written for people and AI coding agents
+alike: the rules that keep the SDKs compatible, how to verify a change, and how to make the
+common kinds of change.
+
+```bash
+cd sdks/python && uv sync --group dev && uv run pytest   # needs Redis or Valkey, see CONTRIBUTING.md
+npm install && npm run docs:dev                          # docs, from the repository root
+```
+
+## License
+
+Licensed by directory (see [`LICENSE`](LICENSE)):
+
+- **Apache License 2.0** for the SDKs, the spec, the docs, the examples and the scripts: use
+  them in any application, open or closed source.
+- **FSL-1.1-ALv2** ([Functional Source License](https://fsl.software)) for `server/` and
+  `dashboard/`: free to run, self-host and modify for your own organization; not to be offered
+  to others as a competing commercial product or service. Each version becomes Apache 2.0 two
+  years after its release.

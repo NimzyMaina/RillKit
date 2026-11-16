@@ -9,7 +9,7 @@
 | 1. `@broker.on_startup` hooks | first, before anything touches the server |
 | 2. `PING` | checks the connection, raises if the server is unreachable |
 | 3. create consumer groups | `XGROUP CREATE ... MKSTREAM` for each subscriber |
-| 4. start consumer threads | one daemon thread per subscriber |
+| 4. start consumer threads | one daemon thread per lane (`concurrency`, default 1) |
 | 5. `@broker.after_startup` hooks | groups exist and consumers are running |
 | | *... messages flow ...* |
 | 6. stop consumers | each finishes its current message and exits |

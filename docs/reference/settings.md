@@ -14,6 +14,7 @@ class Settings:
     password: Optional[str] = None
     ssl: bool = False
     socket_timeout: Optional[float] = 15.0
+    max_connections: Optional[int] = None
     backend: str = "redis"
     mode: str = "standalone"
     username: Optional[str] = None
@@ -31,6 +32,7 @@ class Settings:
 | `password` | `None` | Password. Used only when `url` has no credentials. |
 | `ssl` | `False` | Use TLS. |
 | `socket_timeout` | `15.0` | Read timeout in seconds, `None` for none. Keep it above `block_ms`. |
+| `max_connections` | `None` | Cap on the client's connection pool. `None` keeps the client library's default: **100 with redis-py 8**, effectively unlimited with valkey-py. Raise it for producers with many threads or consumers with more than 100 lanes; the next command otherwise fails with `Too many connections`. |
 | `backend` | `"redis"` | `"redis"` (redis-py) or `"valkey"` (valkey-py, needs `rillkit[valkey]`). |
 | `mode` | `"standalone"` | `"standalone"` or `"cluster"`. |
 | `username` | `None` | ACL username. Used only when `url` has no credentials. |
@@ -60,10 +62,15 @@ Reads these environment variables. Keyword arguments override them. For each con
 | `RILLKIT_PASSWORD` | `<prefix>PASSWORD` | `password`, only without a URL | `None` |
 | `RILLKIT_SSL` | `<prefix>SSL` | `ssl`: true for `1`, `true`, `yes` (any case) | `False` |
 | `RILLKIT_SOCKET_TIMEOUT` | `<prefix>SOCKET_TIMEOUT` | `socket_timeout`: seconds, or `none`/`off`/`0` | `15.0` |
+| `RILLKIT_MAX_CONNECTIONS` | `<prefix>MAX_CONNECTIONS` | `max_connections` (as `int`) | `None` (client default) |
 | `RILLKIT_BACKEND` | | `backend` | `"redis"` |
 | `RILLKIT_MODE` | | `mode` | `"standalone"` |
 | `RILLKIT_CLUSTER_NODES` | | `cluster_nodes`, comma-separated | `()` |
 | `RILLKIT_KEY_LAYOUT` | | `key_layout` | `None` |
+| `RILLKIT_KEY_PREFIX` | | `key_prefix` | `None` |
+| `RILLKIT_TENANT` | | `tenant` | `None` |
+
+`Settings.from_env(prefix="REDIS_", *, config=None, **overrides)`: `config` (else `RILLKIT_CONFIG`) names a [config file](/guide/configuration#config-file) whose `[connection]` and `[keys]` sections fill in what the environment leaves unset.
 
 When a URL is set, the username and password variables are not read, and host, port, db and ssl are ignored by the client. Setting `RILLKIT_HOST`, `PORT`, `DB`, `USERNAME`, `PASSWORD` or `SSL` next to a URL logs a warning on the `rillkit` logger.
 

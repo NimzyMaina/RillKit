@@ -1,0 +1,16 @@
+**/node_modules
+**/.venv
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/test-results
+**/playwright-report
+**/e2e/screenshots
+.git
+.idea
+.docs-build
+docs
+plans
+*.pyc

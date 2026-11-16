@@ -1,6 +1,8 @@
 name: Release
 
-# Publishes to PyPI when a version tag is pushed (git tag v0.1.1 && git push --tags).
+# Publishes the Python SDK (sdks/python) to PyPI when a version tag is pushed
+# (git tag v0.1.1 && git push --tags). Plain vX.Y.Z tags stay the Python SDK's, because the docs
+# site snapshots one version per such tag; other SDKs will use prefixed tags (node-vX.Y.Z).
 # Needs a repository secret PYPI_API_TOKEN holding a PyPI API token for the rillkit project.
 on:
   push:
@@ -10,9 +12,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     environment: pypi
+    defaults:
+      run:
+        working-directory: sdks/python
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          working-directory: sdks/python
       - name: Check the tag matches the package version
         run: |
           version=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")

@@ -1,0 +1,26 @@
+{
+  "type": "MESSAGES_RESPONSE",
+  "request_id": "req_91c2",
+  "next_before": null,
+  "total": 1,
+  "payloads": true,
+  "messages": [
+    {
+      "id": "1794669080000-0",
+      "size": 182,
+      "fields": {
+        "data": "{\"id\": 7, \"amount\": 12.5}"
+      },
+      "traceparent": null,
+      "dead_letter": {
+        "original_id": "1794669071538-1",
+        "stream": "orders",
+        "group": "billing",
+        "deliveries": 3,
+        "error": "card declined for order 7"
+      }
+    }
+  ],
+  "more_after": false,
+  "as_of": "2026-11-15T17:59:53.120000+00:00"
+}

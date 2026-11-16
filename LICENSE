@@ -1,21 +1,29 @@
-MIT License
+RillKit is licensed by directory.
 
-Copyright (c) 2026 Nimrod Maina
+  sdks/       Apache License 2.0      The worker SDKs (published as `rillkit` on PyPI, ...)
+  spec/       Apache License 2.0      The protocol, schemas and conformance vectors
+  docs/       Apache License 2.0      The documentation site
+  examples/   Apache License 2.0      Example and demo code
+  scripts/    Apache License 2.0      Shared tooling
+  server/     FSL-1.1-ALv2            rillkit-server, the control plane
+  dashboard/  FSL-1.1-ALv2            The dashboard
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Everything in this repository not inside server/ or dashboard/ is licensed under the
+Apache License, Version 2.0, unless a file says otherwise. Each licensed directory
+carries its own LICENSE file; the full texts are also in LICENSES/:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+  LICENSES/Apache-2.0.txt     Apache License, Version 2.0
+  LICENSES/FSL-1.1-ALv2.md    Functional Source License, Version 1.1, ALv2 Future
+                              License
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FSL-1.1-ALv2 in short (the license text governs): you may use, modify and
+redistribute server/ and dashboard/ for any purpose except a Competing Use, that is,
+offering them, or something substantially similar, to others as a commercial product
+or service. Running them for your own organization is permitted. Each version
+becomes available under the Apache License, Version 2.0, two years after it is made
+available.
+
+Copyright 2026 Nimrod Maina.
+
+Releases of the Python SDK up to and including 0.3.0 were published under the MIT
+License, and those releases remain available under it.

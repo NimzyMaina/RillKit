@@ -1,0 +1,56 @@
+# rillkit-server with its dashboard, pulling the published image.
+#
+# The server needs Postgres. It does not connect to Redis or Valkey: that is the workers'
+# data plane (RILLKIT_URL), reached through the Relay.
+#
+# Quick start, with a local Postgres:
+#   deploy/install.sh writes .env, enables the local-db profile and starts it.
+#
+# Use your own Postgres (managed, another host, another Compose project): leave
+# RILLKIT_SERVER_DATABASE_URL set in .env and do not enable the local-db profile.
+#
+# Pin a release with RILLKIT_VERSION=v0.4.0. Do not expose this without TLS: workers require
+# wss:// unless they opt into RILLKIT_CONTROL_INSECURE. See deploy/README.md.
+
+name: ${RILLKIT_PROJECT_NAME:-rillkit}
+
+services:
+  server:
+    image: ${RILLKIT_IMAGE:-ghcr.io/nimzymaina/rillkit-server}:${RILLKIT_VERSION:-edge}
+    restart: unless-stopped
+    ports:
+      - "${RILLKIT_PORT:-8080}:8080"
+    environment:
+      RILLKIT_SERVER_DATABASE_URL: ${RILLKIT_SERVER_DATABASE_URL:?set RILLKIT_SERVER_DATABASE_URL in .env}
+      RILLKIT_SERVER_ADMIN_TOKEN: ${RILLKIT_SERVER_ADMIN_TOKEN:?set RILLKIT_SERVER_ADMIN_TOKEN in .env}
+      RILLKIT_SERVER_PUBLIC_URL: ${RILLKIT_SERVER_PUBLIC_URL:-http://localhost:8080}
+      RILLKIT_SERVER_LOG_LEVEL: ${RILLKIT_SERVER_LOG_LEVEL:-INFO}
+      RILLKIT_SERVER_TELEMETRY_INTERVAL_SEC: ${RILLKIT_SERVER_TELEMETRY_INTERVAL_SEC:-5}
+      RILLKIT_SERVER_AUTOSCALE_INTERVAL_SEC: ${RILLKIT_SERVER_AUTOSCALE_INTERVAL_SEC:-5}
+      RILLKIT_SERVER_NODE_TTL_SEC: ${RILLKIT_SERVER_NODE_TTL_SEC:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  # Quick-start database. Enable it with COMPOSE_PROFILES=local-db, or set your own
+  # RILLKIT_SERVER_DATABASE_URL and skip it. It publishes no port, so only this Compose
+  # network can reach it.
+  postgres:
+    image: postgres:17
+    profiles: ["local-db"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rillkit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rillkit}
+      POSTGRES_DB: rillkit
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rillkit -d rillkit"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres:

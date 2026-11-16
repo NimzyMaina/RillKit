@@ -1,0 +1,7 @@
+{
+  "type": "DIRECTIVE_ACK",
+  "directive_id": "dir_99812",
+  "node_id": "worker-node-01",
+  "status": "APPLIED",
+  "current_state": {"concurrency": 12, "state": "RUNNING"}
+}

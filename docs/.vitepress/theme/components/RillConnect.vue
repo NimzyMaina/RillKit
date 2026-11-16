@@ -22,12 +22,18 @@ const dV = 'M28 0 C 28 34, 62 40, 62 80 S 28 126, 28 160'
   <section class="rk-connect-sec" aria-labelledby="rk-connect-h">
   <div class="rk-wrap">
   <header class="rk-connect__head">
-    <h2 id="rk-connect-h" class="rk-h2">Two files and a stream name</h2>
+    <p class="rk-eyebrow">Simple by default</p>
+    <h2 id="rk-connect-h" class="rk-h2">Two files and a stream name, <em>no loop.</em></h2>
     <p class="rk-sub">
       The publisher and the worker agree on <code>"orders"</code> and nothing else. No schema to register, no polling
-      loop, no ack bookkeeping. The path below is the one message 42.5 takes.
+      loop, no ack bookkeeping.
     </p>
   </header>
+  <ol class="rk-steps">
+    <li><b>Install it</b><code>pip install rillkit</code><span>Point <code>RILLKIT_URL</code> at Redis or Valkey: one server or a cluster.</span></li>
+    <li><b>Decorate a function</b><code>@broker.subscribe(Stream(...))</code><span>Name a stream and a group. Your function gets each message as a dict or a Pydantic model.</span></li>
+    <li><b>Run it</b><code>broker.run()</code><span>Groups, retries, the DLQ, heartbeats and a clean shutdown on Ctrl-C come with it.</span></li>
+  </ol>
   <div class="rk-connect" :style="{ '--tab': TAB + 'px', '--pad': PAD + 'px', '--lh': LH + 'px', '--h': H + 'px' }">
     <figure class="rk-win vp-doc rk-win--pub">
       <slot name="publish" />

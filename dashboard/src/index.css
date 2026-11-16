@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./styles/shadcn-base.css";
+@import "@fontsource-variable/figtree/wght.css";
+@import "@fontsource-variable/eb-garamond/wght.css";
+@import "@fontsource-variable/eb-garamond/wght-italic.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "EB Garamond Variable", ui-serif, Georgia, serif;
+  --font-heading: var(--font-serif);
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* RillKit brand tokens */
+  --color-surface: var(--surface);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-lavender: var(--lavender);
+  --color-pink: var(--pink);
+  --color-coral: var(--coral);
+  --color-amber: var(--amber);
+  --color-state-running: var(--state-running);
+  --color-state-running-fill: var(--state-running-fill);
+  --color-state-paused: var(--state-paused);
+  --color-state-paused-fill: var(--state-paused-fill);
+  --color-state-draining: var(--state-draining);
+  --color-state-draining-fill: var(--state-draining-fill);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.5);
+  --radius-3xl: calc(var(--radius) * 2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Light (default): warm cream, ink, deep green. */
+:root {
+  --radius: 1rem;
+
+  --background: #ffffeb;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #1a1a1a;
+  --primary-foreground: #ffffeb;
+  --secondary: #f0d7ff;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f4f4df;
+  --muted-foreground: #444444;
+  --accent: #f1f1dc;
+  --accent-foreground: #1a1a1a;
+  --destructive: #b83218;
+  --border: #e4e4d0;
+  --input: #d6d6c0;
+  --ring: #034f46;
+
+  --surface: #e4e4d0;
+  --brand: #034f46;
+  --brand-foreground: #ffffeb;
+  --lavender: #f0d7ff;
+  --pink: #ffbcf2;
+  --coral: #ff6c4c;
+  --amber: #ffa946;
+
+  --state-running: #034f46;
+  --state-running-fill: color-mix(in oklab, #034f46 11%, transparent);
+  --state-paused: #6b3a00;
+  --state-paused-fill: color-mix(in oklab, #ffa946 38%, transparent);
+  --state-draining: #8f2410;
+  --state-draining-fill: color-mix(in oklab, #ff6c4c 26%, transparent);
+
+  --chart-1: #0b8a74; /* validated: dataviz validate_palette.js, light, on #ffffff */
+  --chart-2: #c56ad9;
+  --chart-3: #ffa946;
+  --chart-4: #e04a28;
+  --chart-5: #1a1a1a;
+}
+
+/* Dark: ink background, cream text. */
+.dark {
+  --background: #161615;
+  --foreground: #ffffeb;
+  --card: #1f1f1d;
+  --card-foreground: #ffffeb;
+  --popover: #232321;
+  --popover-foreground: #ffffeb;
+  --primary: #ffffeb;
+  --primary-foreground: #1a1a1a;
+  --secondary: #3a2d45;
+  --secondary-foreground: #f6eaff;
+  --muted: #262624;
+  --muted-foreground: #bdbda8;
+  --accent: #2a2a27;
+  --accent-foreground: #ffffeb;
+  --destructive: #ff8a70;
+  --border: #ffffeb1f;
+  --input: #ffffeb29;
+  --ring: #6fd0bd;
+
+  --surface: #2a2a27;
+  --brand: #6fd0bd;
+  --brand-foreground: #10221f;
+  --lavender: #f0d7ff;
+  --pink: #ffbcf2;
+  --coral: #ff6c4c;
+  --amber: #ffa946;
+
+  --state-running: #8ee0cf;
+  --state-running-fill: color-mix(in oklab, #6fd0bd 16%, transparent);
+  --state-paused: #ffc785;
+  --state-paused-fill: color-mix(in oklab, #ffa946 18%, transparent);
+  --state-draining: #ffa48f;
+  --state-draining-fill: color-mix(in oklab, #ff6c4c 20%, transparent);
+
+  --chart-1: #27a98f; /* validated: dark, on #1f1f1d */
+  --chart-2: #e3b4ff;
+  --chart-3: #ffa946;
+  --chart-4: #ec6343;
+  --chart-5: #ffffeb;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    font-feature-settings: "ss01";
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  ::selection {
+    background: var(--lavender);
+    color: #1a1a1a;
+  }
+}
+
+@utility font-numeric {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/directive.json",
+  "title": "DIRECTIVE: control plane to worker (spec 5.2)",
+  "description": "Structure only. The rules that need more than a schema (both stream and group or neither, set_id or count) are in spec/conformance/directives.json.",
+  "type": "object",
+  "required": [
+    "type",
+    "directive_id",
+    "cmd"
+  ],
+  "properties": {
+    "type": {
+      "const": "DIRECTIVE"
+    },
+    "directive_id": {
+      "description": "Unique per directive; a repeat within 60 s is a duplicate.",
+      "$ref": "common.json#/$defs/nonEmptyString"
+    },
+    "cmd": {
+      "enum": [
+        "SET_STATE",
+        "SET_CONCURRENCY",
+        "SET_POLL_CONFIG",
+        "MAINTENANCE_ON",
+        "MAINTENANCE_OFF",
+        "EXECUTE_REPLAY",
+        "DELETE_DLQ",
+        "CREATE_STREAM"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "global",
+        "stream",
+        "node"
+      ],
+      "default": "global"
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "node_id": {
+          "$ref": "common.json#/$defs/nonEmptyString"
+        },
+        "stream": {
+          "$ref": "common.json#/$defs/nonEmptyString"
+        },
+        "group": {
+          "$ref": "common.json#/$defs/nonEmptyString"
+        }
+      },
+      "dependentRequired": {
+        "stream": [
+          "group"
+        ],
+        "group": [
+          "stream"
+        ]
+      }
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "common.json#/$defs/state"
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "block_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600000
+        },
+        "poll_ms": {
+          "description": "Alias of block_ms; block_ms wins when both are set.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600000
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 100
+        },
+        "set_id": {
+          "$ref": "common.json#/$defs/nonEmptyString"
+        },
+        "ids": {
+          "description": "DLQ entry ids (EXECUTE_REPLAY, DELETE_DLQ).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]+-[0-9]+$"
+          }
+        },
+        "data": {
+          "description": "EXECUTE_REPLAY with ids: new data field values by entry id.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "all": {
+          "description": "DELETE_DLQ: the whole DLQ.",
+          "const": true
+        },
+        "start": {
+          "description": "CREATE_STREAM: where the group starts.",
+          "enum": [
+            "$",
+            "0"
+          ]
+        }
+      }
+    },
+    "reason": {
+      "description": "Free text for audit logs, e.g. AUTOSCALE_LAG_THRESHOLD_EXCEEDED.",
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "SET_STATE"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "required": [
+              "state"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "SET_CONCURRENCY"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "required": [
+              "concurrency"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "SET_POLL_CONFIG"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "anyOf": [
+              {
+                "required": [
+                  "block_ms"
+                ]
+              },
+              {
+                "required": [
+                  "poll_ms"
+                ]
+              },
+              {
+                "required": [
+                  "batch_size"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "EXECUTE_REPLAY"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "required": [
+              "stream",
+              "group"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "stream"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "required": [
+              "stream",
+              "group"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "node"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "required": [
+              "node_id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "enum": [
+              "DELETE_DLQ",
+              "CREATE_STREAM"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "required": [
+              "stream",
+              "group"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cmd": {
+            "const": "DELETE_DLQ"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "anyOf": [
+              {
+                "required": [
+                  "ids"
+                ]
+              },
+              {
+                "required": [
+                  "all"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

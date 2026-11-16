@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/hello.json",
+  "title": "HELLO: the worker's first frame on a Relay connection (spec 5.4)",
+  "type": "object",
+  "required": [
+    "type",
+    "protocol_version",
+    "node_id",
+    "keys",
+    "sdk"
+  ],
+  "properties": {
+    "type": {
+      "const": "HELLO"
+    },
+    "protocol_version": {
+      "description": "The highest protocol version the worker speaks.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "node_id": {
+      "$ref": "common.json#/$defs/nonEmptyString"
+    },
+    "keys": {
+      "$ref": "common.json#/$defs/keys"
+    },
+    "sdk": {
+      "type": "object",
+      "required": [
+        "language",
+        "version"
+      ],
+      "properties": {
+        "language": {
+          "$ref": "common.json#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "common.json#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "capabilities": {
+      "description": "What the worker lets the control plane see (optional; absent means none).",
+      "type": "object",
+      "properties": {
+        "inspect_messages": {
+          "type": "boolean"
+        },
+        "capture_logs": {
+          "type": "boolean"
+        },
+        "trace_records": {
+          "description": "The worker keeps per-trace records that TRACE_REQUEST can read.",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

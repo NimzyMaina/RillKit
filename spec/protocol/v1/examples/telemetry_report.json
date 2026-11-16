@@ -1,0 +1,13 @@
+{
+  "type": "TELEMETRY_REPORT",
+  "node_id": "worker-node-01",
+  "timestamp": 1763137140,
+  "keys": {"layout": "hashtag", "prefix": "rk", "tenant": null},
+  "workers": {"active": 4, "in_flight": 4, "state": "RUNNING", "poll_ms": 1000, "batch_size": 10,
+              "cpu_pct": 24.5, "mem_mb": 142},
+  "streams": [
+    {"stream": "orders", "group": "billing", "stream_key": "rk:{orders}:stream",
+     "dlq_key": "rk:{orders}:dlq", "lag": 4820, "pending": 12, "ack_rate_sec": 38.5,
+     "attempts_total": 1840, "wait_ms_total": 2145600.0, "work_ms_total": 73600.0}
+  ]
+}

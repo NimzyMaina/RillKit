@@ -2,7 +2,7 @@
 import { withBase } from 'vitepress'
 
 const failure = [
-  { tone: 'blue', t: 'Consumer groups', d: 'The group is created for you and every worker gets its own consumer name. Entries left with a crashed worker are claimed back once they have sat idle long enough.' },
+  { tone: 'brand', t: 'Consumer groups', d: 'The group is created for you and every worker gets its own consumer name. Entries left with a crashed worker are claimed back once they have sat idle long enough.' },
   { tone: 'amber', t: 'Retries with backoff', d: 'A failing message comes back after an exponential backoff, up to max_retries. The default is 3, so a handler runs at most four times for one message.' },
   { tone: 'amber', t: 'nack or reject', d: 'msg.nack() asks for another attempt. msg.reject("reason") says this one can never work and skips the remaining retries.' },
   { tone: 'coral', t: 'Dead-letter stream', d: 'Entries that run out of retries, or are rejected, move to <stream>-dlq with the error, original id, group and delivery count. broker.replay_dlq() puts them back.' },

@@ -1,0 +1,3774 @@
+{
+  "description": "Key and channel names (spec 4.2). 'slot' is the Redis Cluster hash slot of 'expect' (CRC16 of the hash tag).",
+  "cases": [
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "state_global",
+      "args": {},
+      "expect": "rillkit:state:global",
+      "slot": 3780
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "state_node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rillkit:state:node:worker-node-01",
+      "slot": 346
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "dedup",
+      "args": {
+        "directive_id": "dir_99812"
+      },
+      "expect": "rillkit:dedup:dir_99812",
+      "slot": 14577
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rillkit:nodes:worker-node-01",
+      "slot": 4201
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "nodes",
+      "args": {},
+      "expect": "rillkit:nodes",
+      "slot": 4918
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "broadcast_channel",
+      "args": {},
+      "expect": "rillkit:ctl:broadcast",
+      "slot": 14594
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "node_channel",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rillkit:ctl:node:worker-node-01",
+      "slot": 12499
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "orders",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "orders-dlq",
+      "slot": 11368
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rillkit:workers:orders:billing:worker-7",
+      "slot": 10372
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:consumers:orders:billing",
+      "slot": 10756
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "key": "req-1"
+      },
+      "expect": "rillkit:done:orders:req-1",
+      "slot": 4912
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rillkit:logs:orders:1794669071538-1",
+      "slot": 4577
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rillkit:cordon:orders",
+      "slot": 12061
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rillkit:cordon:orders:buffer",
+      "slot": 3352
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:state:stream:orders:billing",
+      "slot": 6305
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "orders",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "dead",
+      "slot": 14209
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rillkit:workers:orders:billing:worker-7",
+      "slot": 10372
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:consumers:orders:billing",
+      "slot": 10756
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "key": "req-1"
+      },
+      "expect": "rillkit:done:orders:req-1",
+      "slot": 4912
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rillkit:logs:orders:1794669071538-1",
+      "slot": 4577
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rillkit:cordon:orders",
+      "slot": 12061
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rillkit:cordon:orders:buffer",
+      "slot": 3352
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:state:stream:orders:billing",
+      "slot": 6305
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "orders:eu",
+      "slot": 10555
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "orders:eu-dlq",
+      "slot": 13923
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rillkit:workers:orders:eu:billing:worker-7",
+      "slot": 5923
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:consumers:orders%3Aeu:billing",
+      "slot": 48
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "key": "req-1"
+      },
+      "expect": "rillkit:done:orders:eu:req-1",
+      "slot": 4255
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rillkit:logs:orders%3Aeu:1794669071538-1",
+      "slot": 10234
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rillkit:cordon:orders%3Aeu",
+      "slot": 9162
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rillkit:cordon:orders%3Aeu:buffer",
+      "slot": 13190
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:state:stream:orders%3Aeu:billing",
+      "slot": 3846
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "a}b{",
+      "slot": 6027
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "a}b{-dlq",
+      "slot": 10419
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rillkit:workers:a}b{:billing:worker-7",
+      "slot": 13821
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:consumers:a}b{:billing",
+      "slot": 4378
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "key": "req-1"
+      },
+      "expect": "rillkit:done:a}b{:req-1",
+      "slot": 2803
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rillkit:logs:a}b{:1794669071538-1",
+      "slot": 16150
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rillkit:cordon:a}b{",
+      "slot": 874
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rillkit:cordon:a}b{:buffer",
+      "slot": 8628
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:state:stream:a}b{:billing",
+      "slot": 13619
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "100%",
+      "slot": 11946
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "100%-dlq",
+      "slot": 13695
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rillkit:workers:100%:billing:worker-7",
+      "slot": 9776
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:consumers:100%25:billing",
+      "slot": 8972
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "key": "req-1"
+      },
+      "expect": "rillkit:done:100%:req-1",
+      "slot": 12616
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rillkit:logs:100%25:1794669071538-1",
+      "slot": 6981
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rillkit:cordon:100%25",
+      "slot": 3432
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rillkit:cordon:100%25:buffer",
+      "slot": 1424
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "rillkit:state:stream:100%25:billing",
+      "slot": 4521
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_global",
+      "args": {},
+      "expect": "rk:{:}:state:global",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rk:{:}:state:node:worker-node-01",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "dedup",
+      "args": {
+        "directive_id": "dir_99812"
+      },
+      "expect": "rk:{:}:dedup:dir_99812",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rk:{:}:nodes:worker-node-01",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "nodes",
+      "args": {},
+      "expect": "rk:{:}:nodes",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "broadcast_channel",
+      "args": {},
+      "expect": "rk:{:}:ctl:broadcast",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "node_channel",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rk:{:}:ctl:node:worker-node-01",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{orders}:stream",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{orders}:dlq",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{orders}:workers:billing:worker-7",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{orders}:consumers:billing",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{orders}:done:req-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{orders}:logs:1794669071538-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{orders}:cordon",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{orders}:cordon:buffer",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{:}:state:stream:orders:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{orders}:stream",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{orders}:dlq:dead",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{orders}:workers:billing:worker-7",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{orders}:consumers:billing",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{orders}:done:req-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{orders}:logs:1794669071538-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{orders}:cordon",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{orders}:cordon:buffer",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{:}:state:stream:orders:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{orders%3Aeu}:stream",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{orders%3Aeu}:dlq",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{orders%3Aeu}:workers:billing:worker-7",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{orders%3Aeu}:consumers:billing",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{orders%3Aeu}:done:req-1",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{orders%3Aeu}:logs:1794669071538-1",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{orders%3Aeu}:cordon",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{orders%3Aeu}:cordon:buffer",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{:}:state:stream:orders%3Aeu:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%7Db%7B}:stream",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%7Db%7B}:dlq",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{a%7Db%7B}:workers:billing:worker-7",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%7Db%7B}:consumers:billing",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{a%7Db%7B}:done:req-1",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{a%7Db%7B}:logs:1794669071538-1",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%7Db%7B}:cordon",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%7Db%7B}:cordon:buffer",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{:}:state:stream:a%7Db%7B:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{100%25}:stream",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{100%25}:dlq",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{100%25}:workers:billing:worker-7",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{100%25}:consumers:billing",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{100%25}:done:req-1",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{100%25}:logs:1794669071538-1",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{100%25}:cordon",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{100%25}:cordon:buffer",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{:}:state:stream:100%25:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "state_global",
+      "args": {},
+      "expect": "shop:{t-42:}:state:global",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "state_node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "shop:{t-42:}:state:node:worker-node-01",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "dedup",
+      "args": {
+        "directive_id": "dir_99812"
+      },
+      "expect": "shop:{t-42:}:dedup:dir_99812",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "shop:{t-42:}:nodes:worker-node-01",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "nodes",
+      "args": {},
+      "expect": "shop:{t-42:}:nodes",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "broadcast_channel",
+      "args": {},
+      "expect": "shop:{t-42:}:ctl:broadcast",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "node_channel",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "shop:{t-42:}:ctl:node:worker-node-01",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "shop:{t-42:orders}:stream",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "shop:{t-42:orders}:dlq",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "shop:{t-42:orders}:workers:billing:worker-7",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:orders}:consumers:billing",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "key": "req-1"
+      },
+      "expect": "shop:{t-42:orders}:done:req-1",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "shop:{t-42:orders}:logs:1794669071538-1",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "shop:{t-42:orders}:cordon",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "shop:{t-42:orders}:cordon:buffer",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:}:state:stream:orders:billing",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "shop:{t-42:orders}:stream",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "shop:{t-42:orders}:dlq:dead",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "shop:{t-42:orders}:workers:billing:worker-7",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:orders}:consumers:billing",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "key": "req-1"
+      },
+      "expect": "shop:{t-42:orders}:done:req-1",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "shop:{t-42:orders}:logs:1794669071538-1",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "shop:{t-42:orders}:cordon",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "shop:{t-42:orders}:cordon:buffer",
+      "slot": 4318
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:}:state:stream:orders:billing",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:stream",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:dlq",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:workers:billing:worker-7",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:consumers:billing",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "key": "req-1"
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:done:req-1",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:logs:1794669071538-1",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:cordon",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "shop:{t-42:orders%3Aeu}:cordon:buffer",
+      "slot": 13261
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:}:state:stream:orders%3Aeu:billing",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:stream",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:dlq",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:workers:billing:worker-7",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:consumers:billing",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "key": "req-1"
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:done:req-1",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:logs:1794669071538-1",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:cordon",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "shop:{t-42:a%7Db%7B}:cordon:buffer",
+      "slot": 5650
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:}:state:stream:a%7Db%7B:billing",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "shop:{t-42:100%25}:stream",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "shop:{t-42:100%25}:dlq",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "shop:{t-42:100%25}:workers:billing:worker-7",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:100%25}:consumers:billing",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "key": "req-1"
+      },
+      "expect": "shop:{t-42:100%25}:done:req-1",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "shop:{t-42:100%25}:logs:1794669071538-1",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "shop:{t-42:100%25}:cordon",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "shop:{t-42:100%25}:cordon:buffer",
+      "slot": 12971
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "shop:{t-42:}:state:stream:100%25:billing",
+      "slot": 14275
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "state_global",
+      "args": {},
+      "expect": "{:}:state:global",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "state_node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "{:}:state:node:worker-node-01",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "dedup",
+      "args": {
+        "directive_id": "dir_99812"
+      },
+      "expect": "{:}:dedup:dir_99812",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "{:}:nodes:worker-node-01",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "nodes",
+      "args": {},
+      "expect": "{:}:nodes",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "broadcast_channel",
+      "args": {},
+      "expect": "{:}:ctl:broadcast",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "node_channel",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "{:}:ctl:node:worker-node-01",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "{orders}:stream",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "{orders}:dlq",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "{orders}:workers:billing:worker-7",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "{orders}:consumers:billing",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "key": "req-1"
+      },
+      "expect": "{orders}:done:req-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "{orders}:logs:1794669071538-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "{orders}:cordon",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "{orders}:cordon:buffer",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "{:}:state:stream:orders:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "{orders}:stream",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "{orders}:dlq:dead",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "{orders}:workers:billing:worker-7",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "{orders}:consumers:billing",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "key": "req-1"
+      },
+      "expect": "{orders}:done:req-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "{orders}:logs:1794669071538-1",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "{orders}:cordon",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "{orders}:cordon:buffer",
+      "slot": 105
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "{:}:state:stream:orders:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "{orders%3Aeu}:stream",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "{orders%3Aeu}:dlq",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "{orders%3Aeu}:workers:billing:worker-7",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "{orders%3Aeu}:consumers:billing",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "key": "req-1"
+      },
+      "expect": "{orders%3Aeu}:done:req-1",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "{orders%3Aeu}:logs:1794669071538-1",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "{orders%3Aeu}:cordon",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "{orders%3Aeu}:cordon:buffer",
+      "slot": 1539
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "{:}:state:stream:orders%3Aeu:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "{a%7Db%7B}:stream",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "{a%7Db%7B}:dlq",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "{a%7Db%7B}:workers:billing:worker-7",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "{a%7Db%7B}:consumers:billing",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "key": "req-1"
+      },
+      "expect": "{a%7Db%7B}:done:req-1",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "{a%7Db%7B}:logs:1794669071538-1",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "{a%7Db%7B}:cordon",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "{a%7Db%7B}:cordon:buffer",
+      "slot": 3985
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "{:}:state:stream:a%7Db%7B:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "{100%25}:stream",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "{100%25}:dlq",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "{100%25}:workers:billing:worker-7",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "{100%25}:consumers:billing",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "key": "req-1"
+      },
+      "expect": "{100%25}:done:req-1",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "{100%25}:logs:1794669071538-1",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "{100%25}:cordon",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "{100%25}:cordon:buffer",
+      "slot": 8732
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": ""
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "{:}:state:stream:100%25:billing",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "state_global",
+      "args": {},
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:state:global",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "state_node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:state:node:worker-node-01",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "dedup",
+      "args": {
+        "directive_id": "dir_99812"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:dedup:dir_99812",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "node",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:nodes:worker-node-01",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "nodes",
+      "args": {},
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:nodes",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "broadcast_channel",
+      "args": {},
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:ctl:broadcast",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "node_channel",
+      "args": {
+        "node_id": "worker-node-01"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:ctl:node:worker-node-01",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:stream",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:dlq",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:workers:billing:worker-7",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:consumers:billing",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:done:req-1",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:logs:1794669071538-1",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:cordon",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:cordon:buffer",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:state:stream:orders:billing",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:stream",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:dlq:dead",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:workers:billing:worker-7",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:consumers:billing",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:done:req-1",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:logs:1794669071538-1",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:cordon",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders}:cordon:buffer",
+      "slot": 5412
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders",
+          "dlq": "dead"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:state:stream:orders:billing",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:stream",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:dlq",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:workers:billing:worker-7",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:consumers:billing",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:done:req-1",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:logs:1794669071538-1",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:cordon",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:orders%3Aeu}:cordon:buffer",
+      "slot": 13844
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "orders:eu"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:state:stream:orders%3Aeu:billing",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:stream",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:dlq",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:workers:billing:worker-7",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:consumers:billing",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:done:req-1",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:logs:1794669071538-1",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:cordon",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:a%7Db%7B}:cordon:buffer",
+      "slot": 10878
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "a}b{"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:state:stream:a%7Db%7B:billing",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:stream",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "dlq",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:dlq",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "heartbeat",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing",
+        "consumer": "worker-7"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:workers:billing:worker-7",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "consumers",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:consumers:billing",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "idempotency",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "key": "req-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:done:req-1",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "logs",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "msg_id": "1794669071538-1"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:logs:1794669071538-1",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:cordon",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "cordon_buffer",
+      "args": {
+        "stream": {
+          "name": "100%"
+        }
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:100%25}:cordon:buffer",
+      "slot": 14161
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "a:b{c}%"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": "100%"
+        },
+        "group": "billing"
+      },
+      "expect": "rk:{a%3Ab%7Bc%7D%25:}:state:stream:100%25:billing",
+      "slot": 7491
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": ""
+        }
+      },
+      "expect_error": "a hash-tagged stream name must not be empty"
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "state_stream",
+      "args": {
+        "stream": {
+          "name": ""
+        },
+        "group": "g"
+      },
+      "expect_error": "a hash-tagged stream name must not be empty"
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "a{b"
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "o"
+        }
+      },
+      "expect_error": "the prefix must not contain braces"
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "tenant": ""
+      },
+      "kind": "stream",
+      "args": {
+        "stream": {
+          "name": "o"
+        }
+      },
+      "expect_error": "the tenant must not be empty"
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "trace",
+      "args": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      },
+      "expect": "rillkit:trace:4bf92f3577b34da6a3ce929d0e0e4736",
+      "slot": 2050
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "trace",
+      "args": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      },
+      "expect": "rk:{:}:trace:4bf92f3577b34da6a3ce929d0e0e4736",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "trace",
+      "args": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      },
+      "expect": "shop:{t-42:}:trace:4bf92f3577b34da6a3ce929d0e0e4736",
+      "slot": 14275
+    }
+  ]
+}

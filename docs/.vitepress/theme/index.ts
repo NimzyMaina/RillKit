@@ -1,12 +1,12 @@
 import { h } from 'vue'
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
-import '@fontsource-variable/bricolage-grotesque/opsz.css'
-import '@fontsource/ibm-plex-sans/400.css'
-import '@fontsource/ibm-plex-sans/500.css'
-import '@fontsource/ibm-plex-sans/600.css'
-import '@fontsource/jetbrains-mono/400.css'
-import '@fontsource/jetbrains-mono/500.css'
+import '@fontsource-variable/eb-garamond/wght.css'
+import '@fontsource-variable/eb-garamond/wght-italic.css'
+import '@fontsource-variable/figtree/wght.css'
+import '@fontsource/ibm-plex-mono/latin-400.css'
+import '@fontsource/ibm-plex-mono/latin-500.css'
+import '@fontsource/ibm-plex-mono/latin-600.css'
 import './custom.css'
 import RillHero from './components/RillHero.vue'
 import RillConnect from './components/RillConnect.vue'
@@ -15,6 +15,7 @@ import RillRedis from './components/RillRedis.vue'
 import RillBefore from './components/RillBefore.vue'
 import RillSpec from './components/RillSpec.vue'
 import RillStart from './components/RillStart.vue'
+import RillControl from './components/RillControl.vue'
 import RillDivider from './components/RillDivider.vue'
 import VersionSwitcher from './components/VersionSwitcher.vue'
 
@@ -34,6 +35,7 @@ export default {
     app.component('RillBefore', RillBefore)
     app.component('RillSpec', RillSpec)
     app.component('RillStart', RillStart)
+    app.component('RillControl', RillControl)
     app.component('RillDivider', RillDivider)
   },
 } satisfies Theme

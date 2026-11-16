@@ -73,6 +73,44 @@ A stream grows forever unless you trim it. Set `maxlen` on the `Stream`, or pass
 
 ::: warning Trimming can drop unprocessed messages
 If consumers fall further behind than `maxlen` entries, the oldest entries are deleted before anyone reads them. Choose a cap comfortably larger than your worst-case backlog. If an entry that is still pending gets trimmed, RillKit notices when it tries to claim it and simply acknowledges it.
+
+## Publishing at high rates
+
+`publish` is one synchronous `XADD`: the call returns when Redis answers, so a single publisher
+process is bound by the round trip. In a benchmark on one laptop it reached roughly 4,000
+messages/s, and the send latency grew sharply near that ceiling. For more:
+
+- **Run several publisher processes or connections.** Each has its own pool; that scales better
+  than making one process do more.
+- **Raise the pool cap.** redis-py 8 defaults it to 100 connections, so a thread pool of request
+  handlers can exhaust it with `Too many connections`. Set
+  `Settings(max_connections=…)` / `RILLKIT_MAX_CONNECTIONS` to peak concurrent commands plus
+  headroom (see [configuration](/guide/configuration#client-options)).
+- **Watch lag.** RillKit does not slow producers down when consumers fall behind. The stream
+  grows until Redis runs out of memory, so pair publishing with lag alerts, autoscaling, or a
+  `maxlen` that fits your backlog. See [operations](/guide/operations#what-to-watch).
+
+## Publishing many at once
+
+`publish_many` sends a list of bodies in one pipeline, so a batch costs one round trip instead of
+one per message:
+
+```python
+ids = broker.publish_many("events", [{"n": 1}, {"n": 2}, {"n": 3}], maxlen=10_000)
+```
+
+It is **not** a different wire operation and it does **not** lose trace context. Every
+broker-wide middleware runs for every body, so [`TraceContext`](/reference/middleware#tracecontext)
+sets a `traceparent` on each entry: one trace id with a separate span per message, exactly as if
+you had called `publish` three times. Trace records, log capture and consumers see no difference.
+
+Two details:
+
+- Encoding happens before anything is written. A body that cannot be encoded raises
+  `PublishError` and the batch publishes nothing.
+- Middleware that inspects the **returned entry id** inside `publish_scope` sees `""` during a
+  batch, because ids only exist after the pipeline runs. The built-in middleware does not use the
+  id; the real ids are returned to you in order.
 :::
 
 ## The `publisher` decorator
