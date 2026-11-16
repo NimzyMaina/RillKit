@@ -58,6 +58,11 @@
             "minimum": 0
           },
           "started_at": {"type": "integer", "minimum": 0},
+          "started_us": {
+            "description": "Optional epoch microseconds for started_at; orders attempts that start in the same millisecond.",
+            "type": "integer",
+            "minimum": 0
+          },
           "finished_at": {"type": "integer", "minimum": 0},
           "outcome": {"enum": ["ok", "error", "dead_letter"]}
         }

@@ -639,6 +639,7 @@ class Subscriber:
                 "delivery": str(max(1, msg.deliveries)),
                 "published_at": str(started_ms if published is None else published),
                 "started_at": str(started_ms),
+                "started_us": str(int(round(started_wall * 1_000_000))),
                 "finished_at": str(started_ms + int(round(work_ms))),
                 "outcome": "dead_letter" if dead else ("ok" if ok else "error"),
             }

@@ -280,7 +280,8 @@ def _trace_order(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             depth += 1
         return depth
 
-    return sorted(records, key=lambda r: (depth(r["span_id"]), r["started_at"],
+    return sorted(records, key=lambda r: (depth(r["span_id"]),
+                                          r.get("started_us", r["started_at"] * 1000),
                                           r["published_at"]))
 
 
@@ -723,6 +724,7 @@ class ControlPlane:
                     "delivery": int(f.get("delivery", "1")),
                     "published_at": int(f.get("published_at", "0")),
                     "started_at": int(f.get("started_at", "0")),
+                    "started_us": int(f.get("started_us", int(f.get("started_at", "0")) * 1000)),
                     "finished_at": int(f.get("finished_at", "0")),
                     "outcome": f.get("outcome", "ok"),
                 }

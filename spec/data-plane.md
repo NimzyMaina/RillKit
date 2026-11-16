@@ -218,12 +218,14 @@ append, capped at about 1000 entries):
 | `stream`, `group`, `message_id`, `delivery` | The attempt: logical stream and group, entry id, delivery number |
 | `consumer`, `node_id` | Who ran it |
 | `published_at`, `started_at`, `finished_at` | Epoch milliseconds; `published_at` comes from the entry id |
+| `started_us` | Optional epoch microseconds for `started_at`, to order attempts that start in the same millisecond |
 | `outcome` | `ok` (handled and acknowledged), `error` (the handler failed, or the message was nacked) or `dead_letter` (this attempt moved it to the DLQ) |
 
 - No payload, header, log line or exception text is stored: a record is metadata.
 - A missing or invalid `traceparent`, or `trace_records` off, MUST NOT write a record.
 - Failing to write a record MUST NOT fail or retry the message; the attempt keeps its outcome.
-- Records are returned oldest first. Every stream of one trace writes to the same key, which is
+- Records are returned oldest first: by span parentage, then `started_us` (or `started_at`), then
+  `published_at`. Every stream of one trace writes to the same key, which is
   what makes a trace readable end to end.
 
 ## 10. Not yet specified

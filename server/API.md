@@ -199,7 +199,8 @@ interface TraceRecord {           // one handler attempt (data-plane 9.2); metad
   consumer: string; node_id: string;
   delivery: number;               // 1 for the first attempt
   published_at: number;           // epoch milliseconds, from the entry id
-  started_at: number; finished_at: number;
+  started_at: number; started_us?: number;  // epoch ms; optional microseconds for ordering
+  finished_at: number;
   outcome: "ok" | "error" | "dead_letter";
 }
 interface Trace { trace_id: string; records: TraceRecord[];  // oldest first; empty when unknown

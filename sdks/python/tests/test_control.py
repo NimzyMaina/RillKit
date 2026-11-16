@@ -627,3 +627,9 @@ def test_trace_order_follows_parent_spans():
     # A child can be appended before its parent and share its millisecond.
     assert [r["span_id"] for r in _trace_order([child, parent, sibling])] == [
         "c", "a", "b"]
+    # Unrelated roots in the same millisecond fall back to the microsecond start.
+    slow = {"span_id": "d", "parent_span_id": "caller", "started_at": 10,
+            "started_us": 10_000_900, "published_at": 10}
+    quick = {"span_id": "e", "parent_span_id": "caller", "started_at": 10,
+             "started_us": 10_000_100, "published_at": 10}
+    assert [r["span_id"] for r in _trace_order([slow, quick])] == ["e", "d"]
