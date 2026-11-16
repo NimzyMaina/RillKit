@@ -4,6 +4,11 @@
 
 The version picker in the top bar switches between the latest docs and the docs of every release, keeping you on the same page when it exists there. [All versions](/versions) lists each release with its tag, its docs, the release notes when there are any, and a GitHub compare link to the release before it, such as `https://github.com/NimzyMaina/RillKit/compare/v0.1.0...v0.1.1`. The compare view is the complete list of changes between two releases.
 
+## From 0.4.0 to 0.4.1
+
+`rillkit.__version__` reports the installed package version again. 0.4.0 was
+published with the 0.3.0 string in that attribute; no behaviour changed.
+
 ## From 0.3 to 0.4
 
 **Without the control plane, nothing changes in behaviour.** It is off unless you turn it on, and off means no extra keys, connections, threads or log handlers.
