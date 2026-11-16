@@ -1,6 +1,12 @@
 # RillKit Platform & Control Plane Technical Specification
 
-> **Status (November 2026).** Milestone 1 (section 6) is implemented in the Python SDK. The data
+> **Status (November 2026).** Milestone 1 (section 6) is implemented in the Python SDK.
+> Milestone 2 is implemented except OpenTelemetry trace ingestion: the Relay client
+> (`sdks/python`), and `rillkit-server` (`server/`) with the Relay gateway, directive routing
+> across replicas, the leader-elected autoscaler and live events. Milestone 3 is implemented
+> except producer cordoning with FIFO replay: the dashboard
+> (`dashboard/`) with the fleet console, stream controls, autoscaling policies, DLQ replay,
+> wait/work charts, per-trace timelines and the inline message detail. The data
 > plane is specified in [data-plane.md](data-plane.md); the messages in section 5 have JSON
 > Schemas in [protocol/v1](protocol/v1); and the rules in sections 2.1, 2.2 and 4.2 are checked
 > by the [conformance vectors](conformance). Where this document and a vector disagree, the
@@ -126,11 +132,13 @@ api_key_env = "RILLKIT_API_KEY"   # name of the variable holding the secret, nev
   * `SET_CONCURRENCY(n)`: Scales local worker coroutines/subprocesses up or drains excess down to `n`.
   * `SET_STATE(RUNNING | PAUSED | MAINTENANCE | DRAINING)`: Transitions polling state immediately via async wakeup events (zero blind sleep delays).
   * `SET_POLL_CONFIG(block_ms, batch_size)`: Adjusts `XREADGROUP` batch size and block timeout on the next tick.
-  * `EXECUTE_REPLAY(...)`: Executes `XGROUP SETID` or an atomic DLQ-to-primary-stream replay (the stream and DLQ share a slot under `HashTagKeys`; ordered add-then-delete otherwise, as `replay_dlq` does today) and emits `DIRECTIVE_ACK`.
+  * `DELETE_DLQ(ids | all)` and `CREATE_STREAM(start)` (*implementation note*, added with the dashboard's DLQ manager and stream creation): delete chosen DLQ entries or the whole DLQ; create a stream and its group (`XGROUP CREATE ... MKSTREAM`).
+  * `EXECUTE_REPLAY(...)`: also takes `ids` (chosen DLQ entries) with optional `data` (a replacement `data` field per entry, to fix a payload before it is handled again). Executes `XGROUP SETID` or an atomic DLQ-to-primary-stream replay (the stream and DLQ share a slot under `HashTagKeys`; ordered add-then-delete otherwise, as `replay_dlq` does today) and emits `DIRECTIVE_ACK`.
 * **Crash Recovery & Observability:**
   * Runs jittered periodic `XAUTOCLAIM` sweeps (atomic in Valkey/Redis, safe across concurrent peers).
   * Propagates W3C `traceparent` headers and captures per-message handler logs via `contextvars` into TTL-bounded Valkey streams (the log key for `(stream, msg_id)` from the key builder, see section 4), forwarding them up the Relay on demand.
   * *Implementation note:* log capture is **opt-in** (`Control(capture_logs=True)`, `RILLKIT_CAPTURE_LOGS`). Handler logs often contain message data, and captured logs are stored in Valkey (on Cloud, the shared cluster) and shown on the dashboard. By default only the exception class name is stored, never its message or traceback; capture can be limited to named loggers and passed through a redaction hook.
+  * *Implementation note:* per-trace records are **opt-in** (`Control(trace_records=True)`, `RILLKIT_TRACE_RECORDS`). Each handler attempt appends one entry to the trace key of the message's trace id, kept for one hour and capped at roughly 1000 entries: ids, stream and group, consumer and node, delivery number, timestamps and outcome, never the payload or exception text. Aggregate attempt timings (`attempts_total`, `wait_ms_total`, `work_ms_total`) are part of telemetry whenever the control plane is on: they are counts and durations, not contents.
   * *Implementation note:* directives are parsed strictly: commands, scopes and states are exact-case, numeric parameters must be JSON integers, and `EXECUTE_REPLAY` parameters are validated before the directive id is recorded. Concurrency is implemented as consumer loops ("lanes") named `<consumer>`, `<consumer>-1`, ...; `DRAINING` retires every lane but keeps the process up.
 
 ---
@@ -147,7 +155,7 @@ Deployed as a single unified service (Cloud SaaS or `docker run rillkit/server` 
   * Routes **cluster-wide directives** (e.g., `MAINTENANCE_ON`, `EXECUTE_REPLAY`) down any single healthy Relay in that tenant's cluster (failing over instantaneously to another peer socket if that connection drops).
 * **High-Availability Autoscaler Loop (Leader-Elected):**
   * Across multiple `rillkit-server` replicas, a single instance acquires an advisory lock (`pg_try_advisory_lock` / Redis lock) to act as the active **Autoscaler Brain**.
-  * Evaluates deduplicated stream lag, PEL depth, processing velocity, and node capacity against user-configured scaling policies (`min_workers`, `max_workers`, `target_lag_per_worker`, `upscale_cooldown_sec`, `downscale_cooldown_sec`).
+  * Evaluates deduplicated stream lag, PEL depth, processing velocity, and node capacity against user-configured scaling policies (`min_workers`, `max_workers`, `target_lag_per_worker`, `upscale_cooldown_sec`, `downscale_cooldown_sec`). It sizes from both the backlog (`ceil(lag / target_lag_per_worker)`) and the observed arrival rate (finished per second plus backlog growth) with headroom, so a stream that is keeping up at zero lag is not scaled down to its minimum and does not oscillate. A new leader seeds that rate/capacity estimate from the recent samples, so a failover does not restart the estimate from zero.
   * Dispatches `SET_CONCURRENCY` directives down the target node Relays.
 * **Direct-Valkey Writes:** `rillkit-server` may write the state keys and publish on the control channels directly, using a privileged ACL user of its own. It builds key names with the same rules as the worker's key builder (section 4.2), from the tenant id and prefix in **its own records**, never from what a worker reports. A mismatch between a node's reported `keys` descriptor (5.1) and the server's records is raised as an alert. Self-hosted single-customer deployments use the same rules with whatever layout their nodes report.
 
@@ -155,7 +163,7 @@ Deployed as a single unified service (Cloud SaaS or `docker run rillkit/server` 
 * **Fleet & Autoscaling Console:** Real-time view of connected worker nodes, lag vs. concurrency charts, autoscaling policy controls, dynamic `block_ms` / `batch_size` tuning, and one-click **Pause / Resume / Drain** buttons.
 * **Maintenance Mode & Cordon Switch:** Global or per-stream `MAINTENANCE` toggle with live buffered message counters and ordered FIFO replay on exit.
 * **Stream & DLQ Replay Inspector:** Browse DLQ payloads (the DLQ key each node reports per stream, e.g. `orders-dlq`, `orders-failed` or `rk:{orders}:dlq`; never a name derived from the stream name), filter by error or timestamp, and trigger selective or point-in-time replays (`EXECUTE_REPLAY`).
-* **Distributed Trace Waterfall & Live Log Drawer:** Renders OpenTelemetry span waterfalls (queue wait time vs. handler execution time) and tails live `contextvars` per-message logs over Server-Sent Events (SSE).
+* **Distributed Trace Timeline & Wait/Work Charts:** Renders a per-trace waterfall from the timings the workers themselves report — queue wait vs. handler execution, in order, across every stream the trace touches — and per-stream wait/work trends. Captured `contextvars` per-message logs are fetched on demand. Ingesting OpenTelemetry spans from callers is future work (milestone 2); the timeline needs no tracing backend.
 
 ---
 
@@ -192,6 +200,7 @@ Examples use stream `orders`, group `billing`, consumer `worker-7`, node `worker
 | Broadcast wakeups | Pub/Sub channel | `rillkit:ctl:broadcast` | `shop:{t-42:}:ctl:broadcast` |
 | Node wakeups | Pub/Sub channel | `rillkit:ctl:node:worker-node-01` | `shop:{t-42:}:ctl:node:worker-node-01` |
 | Per-message logs | STREAM, TTL | `rillkit:logs:orders:1794669071538-1` | `shop:{t-42:orders}:logs:1794669071538-1` |
+| Per-trace records | STREAM, TTL 1 h | `rillkit:trace:4bf92f3577b34da6a3ce929d0e0e4736` | `shop:{t-42:}:trace:4bf92f3577b34da6a3ce929d0e0e4736` |
 | Producer cordon flag | STRING | `rillkit:cordon:orders` | `shop:{t-42:orders}:cordon` |
 | Cordon buffer | STREAM | `rillkit:cordon:orders:buffer` | `shop:{t-42:orders}:cordon:buffer` |
 
@@ -213,7 +222,7 @@ Changes from the first draft of this spec:
 - **Control tag:** `{enc(tenant):}`, or `{:}` without a tenant.
 - **Base:** `<prefix>:<tag>`, or just `<tag>` when the prefix is empty.
 - **Stream-scoped keys:** `<stream base>:` + `stream` | `dlq` | `dlq:<custom>` | `workers:<group>:<consumer>` | `consumers:<group>` | `done:<key>` | `logs:<msg_id>` | `cordon` | `cordon:buffer`.
-- **Control keys:** `<control base>:` + `state:global` | `state:stream:enc(stream):<group>` | `state:node:<node_id>` | `dedup:<directive_id>` | `nodes` | `nodes:<node_id>` | `ctl:broadcast` | `ctl:node:<node_id>`.
+- **Control keys:** `<control base>:` + `state:global` | `state:stream:enc(stream):<group>` | `state:node:<node_id>` | `dedup:<directive_id>` | `nodes` | `nodes:<node_id>` | `ctl:broadcast` | `ctl:node:<node_id>` | `trace:<trace_id>`.
 
 `PlainKeys`:
 - **Data keys:** unchanged from 0.1 (raw names, as in the table above).
@@ -281,13 +290,22 @@ ACL SETUSER tenant-t-42 on >SECRET resetkeys resetchannels \
       "dlq_key": "rk:{orders}:dlq",
       "lag": 4820,
       "pending": 12,
-      "ack_rate_sec": 38.5
+      "ack_rate_sec": 38.5,
+      "attempts_total": 1840,
+      "wait_ms_total": 2145600.0,
+      "work_ms_total": 73600.0
     }
   ]
 }
 ```
 
 `keys` describes the node's key builder (`layout` is `plain`, `hashtag` or `custom`). The self-hosted direct-Valkey mode uses it to build control keys with the rules in 4.2. `stream_key` and `dlq_key` are the physical keys of each stream, which the dashboard uses for lag, DLQ browsing and replay instead of deriving names. For a `custom` layout, the server only uses reported keys and relays directives through a node rather than writing to Valkey itself.
+
+`attempts_total`, `wait_ms_total` and `work_ms_total` are cumulative since the worker started:
+handler attempts, their summed wait from publish to handler start, and their summed handler
+duration (both in milliseconds; data-plane section 9). They are optional: a reader MUST treat an
+absent value as unknown. With the deltas between two reports the server shows the average wait
+and work per attempt; it never stores per-message timings.
 
 ### 5.2 Control Plane $\rightarrow$ Worker (Directive)
 ```json
@@ -324,6 +342,51 @@ ACL SETUSER tenant-t-42 on >SECRET resetkeys resetchannels \
 }
 ```
 
+### 5.4 The Relay session
+
+Schemas for every frame are in [protocol/v1](protocol/v1). One WebSocket connection carries one
+session; every frame is one JSON text message.
+
+1. The worker connects to `<control url>/relay/v1` (`wss://`; `ws://` only when the worker opts
+   in to an insecure connection) with `Authorization: Bearer <api key>`.
+2. The worker sends `HELLO`: its node id, its `keys` descriptor (5.1), its SDK and the highest
+   protocol version it speaks.
+3. The server checks the key and the descriptor. A tenant in Cloud mode (`enforce_keys`)
+   requires `{"layout": "hashtag", "prefix": "rk", "tenant": <the key's tenant>}`. On success it
+   answers `WELCOME` with the agreed protocol version and the telemetry interval. Otherwise it
+   sends `ERROR` and closes:
+
+   | `code` | Close code | Worker reaction |
+   | --- | --- | --- |
+   | `UNAUTHORIZED` | 4001 | Log an error; retry with backoff (the key may be restored) |
+   | `TENANT_MISMATCH` | 4003 | Log an error; retry with backoff |
+   | `UNSUPPORTED_VERSION` | 4006 | Log an error; retry with backoff |
+   | `BAD_FRAME` | 4400 | Log; reconnect |
+   | `REPLACED` | 4009 | Another connection with the same node id took over; reconnect with backoff |
+
+   In every case the worker keeps processing under the last stored state: the Relay failing
+   never stops consumption (2.0, "Processing fails open").
+4. During the session:
+   - worker → server: `TELEMETRY_REPORT` every `telemetry_interval_sec`, `DIRECTIVE_ACK` for
+     every `DIRECTIVE`, `LOGS_RESPONSE` for every `LOGS_REQUEST`, `TRACE_RESPONSE` for every
+     `TRACE_REQUEST`;
+   - server → worker: `DIRECTIVE` (applied with the dedup rules in 2.1, then acknowledged),
+     `LOGS_REQUEST` (answered from the log key of the message; empty when nothing was captured),
+     `TRACE_REQUEST` (answered from the trace key of the trace id; empty when the worker keeps no
+     trace records or the key expired) and `MESSAGES_REQUEST` (a page of the stream's or DLQ's
+     entries, newest first, answered with `MESSAGES_RESPONSE`). Payloads and DLQ error texts are
+     included only if the worker allows `inspect_messages` (`RILLKIT_INSPECT_MESSAGES`), which it
+     announces in `HELLO` `capabilities` along with `capture_logs` and `trace_records`; otherwise
+     only ids, sizes, delivery status and trace ids leave the worker.
+   - Unknown frame types are ignored by both sides, so either can add optional frames within v1.
+5. The worker reconnects after any disconnect with exponential backoff (1 s doubling to 30 s,
+   ±50 % jitter), resetting after a successful `WELCOME`.
+
+*Implementation note:* the server stores each node's latest telemetry, so any replica can serve
+the dashboard, and routes a directive to the replica holding a suitable connection through
+Postgres `LISTEN`/`NOTIFY`. Exactly one replica claims each directive before sending it, and the
+worker-side dedup makes a repeated delivery harmless anyway.
+
 ---
 
 ## 6. Phased Implementation Plan for Coding Agent
@@ -339,14 +402,16 @@ ACL SETUSER tenant-t-42 on >SECRET resetkeys resetchannels \
 * Implement elastic worker pool scaling (`SET_CONCURRENCY`) and deterministic state transitions (`RUNNING`, `PAUSED`, `MAINTENANCE`, `DRAINING`) without dropping in-flight messages.
 * Implement dynamic `block_ms` and `batch_size` updates on the `XREADGROUP` loop.
 * Implement `contextvars`-bound per-message execution log capture into the per-message log keys (section 4) and W3C `traceparent` span propagation.
+* Record the wait and work of every handler attempt, report the totals in telemetry, and (opt-in) keep per-trace records in the trace key (section 4, data-plane 9).
 
-### Milestone 2: `rillkit` Outbound Relay + `rillkit-server` Gateway & Autoscaler
+### Milestone 2: `rillkit` Outbound Relay + `rillkit-server` Gateway & Autoscaler (done, except OpenTelemetry trace ingestion)
 * Implement the persistent outbound WebSocket/HTTP2 Relay client in `rillkit` with exponential jittered backoff, telemetry reporting, and Relay-to-Valkey directive fan-out.
 * Build `rillkit-server` Relay connection registry, targeted/cluster-wide directive router, and leader-elected Autoscaler policy evaluation loop.
-* Add SSE log streaming and OpenTelemetry trace ingestion endpoints to `rillkit-server`.
+* Add SSE log streaming and OpenTelemetry trace ingestion endpoints to `rillkit-server`. (On-demand log and trace fetching are implemented; live log streaming and OpenTelemetry ingestion are not.)
 
-### Milestone 3: `rillkit-server` Modern Dashboard
+### Milestone 3: `rillkit-server` Modern Dashboard (done, except producer cordoning)
 * Build the React/TypeScript SPA embedded in `rillkit-server`.
 * Implement the Fleet & Autoscaler Console (live worker nodes, lag vs. concurrency charts, policy sliders, and Pause/Resume/Drain controls).
 * Implement the Maintenance Mode & Stream Cordon switch with ordered FIFO replay on exit.
-* Implement the Stream & DLQ Replay Inspector (`EXECUTE_REPLAY`) and the Trace Waterfall + Live Log Drawer.
+* Implement the wait/work bottleneck charts and the per-trace timeline from the timings the workers report (no OpenTelemetry spans).
+* Implement the Stream & DLQ Replay Inspector (`EXECUTE_REPLAY`) and the Trace Waterfall + inline message detail.

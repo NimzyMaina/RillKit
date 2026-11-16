@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/logs_response.json",
+  "title": "LOGS_RESPONSE: a worker's answer to LOGS_REQUEST (spec 5.4)",
+  "type": "object",
+  "required": ["type", "request_id", "records"],
+  "properties": {
+    "type": {"const": "LOGS_RESPONSE"},
+    "request_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+    "records": {
+      "description": "Oldest first; empty when nothing was captured (capture_logs off, or expired).",
+      "type": "array",
+      "maxItems": 1000,
+      "items": {"type": "object", "additionalProperties": {"type": "string"},
+                "required": ["ts", "level", "logger", "message"]}
+    },
+    "error": {"type": "string"}
+  }
+}

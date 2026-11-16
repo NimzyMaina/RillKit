@@ -3,38 +3,215 @@
   "$id": "https://rillkit.dev/protocol/v1/telemetry_report.json",
   "title": "TELEMETRY_REPORT: worker to control plane (spec 5.1)",
   "type": "object",
-  "required": ["type", "node_id", "timestamp", "keys", "workers", "streams"],
+  "required": [
+    "type",
+    "node_id",
+    "timestamp",
+    "keys",
+    "workers",
+    "streams"
+  ],
   "properties": {
-    "type": {"const": "TELEMETRY_REPORT"},
-    "node_id": {"$ref": "common.json#/$defs/nonEmptyString"},
-    "timestamp": {"description": "Unix time in seconds.", "type": "integer", "minimum": 0},
-    "keys": {"$ref": "common.json#/$defs/keys"},
+    "type": {
+      "const": "TELEMETRY_REPORT"
+    },
+    "node_id": {
+      "$ref": "common.json#/$defs/nonEmptyString"
+    },
+    "timestamp": {
+      "description": "Unix time in seconds.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "keys": {
+      "$ref": "common.json#/$defs/keys"
+    },
     "workers": {
       "type": "object",
-      "required": ["active", "in_flight", "state"],
+      "required": [
+        "active",
+        "in_flight",
+        "state"
+      ],
       "properties": {
-        "active": {"description": "Consumer loops running on this node.", "type": "integer", "minimum": 0},
-        "in_flight": {"description": "Messages being handled right now.", "type": "integer", "minimum": 0},
-        "state": {"$ref": "common.json#/$defs/state"},
-        "poll_ms": {"description": "XREADGROUP block time in use.", "type": ["integer", "null"], "minimum": 1},
-        "batch_size": {"type": ["integer", "null"], "minimum": 1},
-        "cpu_pct": {"description": "Process CPU since the last report; null when unknown.", "type": ["number", "null"], "minimum": 0},
-        "mem_mb": {"description": "Resident memory; null where the platform does not report it.", "type": ["number", "null"], "minimum": 0}
+        "active": {
+          "description": "Consumer loops running on this node.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "in_flight": {
+          "description": "Messages being handled right now.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "state": {
+          "$ref": "common.json#/$defs/state"
+        },
+        "poll_ms": {
+          "description": "XREADGROUP block time in use.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "batch_size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "cpu_pct": {
+          "description": "Process CPU since the last report; null when unknown.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "mem_mb": {
+          "description": "Resident memory; null where the platform does not report it.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
       }
     },
     "streams": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["stream", "group", "stream_key", "dlq_key", "lag", "pending", "ack_rate_sec"],
+        "required": [
+          "stream",
+          "group",
+          "stream_key",
+          "dlq_key",
+          "lag",
+          "pending",
+          "ack_rate_sec"
+        ],
         "properties": {
-          "stream": {"description": "Logical stream name.", "$ref": "common.json#/$defs/nonEmptyString"},
-          "group": {"$ref": "common.json#/$defs/nonEmptyString"},
-          "stream_key": {"description": "Physical key, from the node's key builder.", "$ref": "common.json#/$defs/nonEmptyString"},
-          "dlq_key": {"description": "Physical DLQ key. Never derive it from the stream name.", "$ref": "common.json#/$defs/nonEmptyString"},
-          "lag": {"description": "XINFO GROUPS lag; null when the server cannot tell.", "type": ["integer", "null"], "minimum": 0},
-          "pending": {"type": ["integer", "null"], "minimum": 0},
-          "ack_rate_sec": {"description": "Messages finished per second since the last report.", "type": "number", "minimum": 0}
+          "stream": {
+            "description": "Logical stream name.",
+            "$ref": "common.json#/$defs/nonEmptyString"
+          },
+          "group": {
+            "$ref": "common.json#/$defs/nonEmptyString"
+          },
+          "stream_key": {
+            "description": "Physical key, from the node's key builder.",
+            "$ref": "common.json#/$defs/nonEmptyString"
+          },
+          "dlq_key": {
+            "description": "Physical DLQ key. Never derive it from the stream name.",
+            "$ref": "common.json#/$defs/nonEmptyString"
+          },
+          "lag": {
+            "description": "XINFO GROUPS lag; null when the server cannot tell.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "pending": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "ack_rate_sec": {
+            "description": "Messages finished per second since the last report.",
+            "type": "number",
+            "minimum": 0
+          },
+          "concurrency": {
+            "description": "Lanes running for this subscription on this node (added in v1, optional).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "state": {
+            "description": "This subscription's desired state on this node (added in v1, optional).",
+            "oneOf": [
+              {
+                "$ref": "common.json#/$defs/state"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "succeeded_total": {
+            "description": "Handler runs that finished and were acknowledged, since the worker started. Optional.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "failed_total": {
+            "description": "Handler runs that raised, nacked or rejected, since the worker started. Optional.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "dead_lettered_total": {
+            "description": "Messages moved to the DLQ, since the worker started. Optional.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "bytes_total": {
+            "description": "Bytes of the entries handled (each run), since the worker started. Optional.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "dlq_length": {
+            "description": "Entries in the DLQ now. Optional.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "attempts_total": {
+            "description": "Handler attempts since the worker started. Optional (added in v1).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "wait_ms_total": {
+            "description": "Summed milliseconds from publish to handler start, over those attempts. Optional (added in v1).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "work_ms_total": {
+            "description": "Summed milliseconds spent in the handler, over those attempts. Optional (added in v1).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          }
         }
       }
     }

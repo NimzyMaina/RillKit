@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rillkit.dev/protocol/v1/logs_request.json",
+  "title": "LOGS_REQUEST: the server asks a worker for one message's captured logs (spec 5.4)",
+  "type": "object",
+  "required": ["type", "request_id", "stream", "msg_id"],
+  "properties": {
+    "type": {"const": "LOGS_REQUEST"},
+    "request_id": {"$ref": "common.json#/$defs/nonEmptyString"},
+    "stream": {"description": "Logical stream name.", "$ref": "common.json#/$defs/nonEmptyString"},
+    "msg_id": {"$ref": "common.json#/$defs/nonEmptyString"}
+  }
+}

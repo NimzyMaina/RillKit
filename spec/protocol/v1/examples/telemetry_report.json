@@ -7,6 +7,7 @@
               "cpu_pct": 24.5, "mem_mb": 142},
   "streams": [
     {"stream": "orders", "group": "billing", "stream_key": "rk:{orders}:stream",
-     "dlq_key": "rk:{orders}:dlq", "lag": 4820, "pending": 12, "ack_rate_sec": 38.5}
+     "dlq_key": "rk:{orders}:dlq", "lag": 4820, "pending": 12, "ack_rate_sec": 38.5,
+     "attempts_total": 1840, "wait_ms_total": 2145600.0, "work_ms_total": 73600.0}
   ]
 }

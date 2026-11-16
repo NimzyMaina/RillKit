@@ -6,7 +6,7 @@ consumer groups and a control plane.
 
 | Path | What it is | How implementations use it |
 | --- | --- | --- |
-| `protocol/v1/*.json` | JSON Schemas of the messages between workers and the control plane: `TELEMETRY_REPORT`, `DIRECTIVE`, `DIRECTIVE_ACK` | Generate types from them (json-schema-to-typescript, datamodel-code-generator, quicktype, ...) and validate incoming messages |
+| `protocol/v1/*.json` | JSON Schemas of the messages between workers and the control plane: the Relay session (`HELLO`, `WELCOME`, `ERROR`), `TELEMETRY_REPORT`, `DIRECTIVE`, `DIRECTIVE_ACK`, `LOGS_REQUEST`, `LOGS_RESPONSE`, `TRACE_REQUEST`, `TRACE_RESPONSE` | Generate types from them (json-schema-to-typescript, datamodel-code-generator, quicktype, ...) and validate incoming messages |
 | `protocol/v1/examples/` | One valid example of each message | Smoke tests for the schemas and for generated types |
 | `conformance/*.json` | Test vectors: inputs and the exact expected output | Every SDK's test suite loads them and must pass all of them |
 
@@ -25,9 +25,9 @@ Each file is `{"description": ..., "cases": [...]}`, except `data_plane.json` (s
 | --- | --- | --- |
 | `keys.json` | Key and channel names for every layout, prefix and tenant (spec 4.2) | `builder`, `kind`, `args` → `expect` (the key) and `slot` (its cluster hash slot), or `expect_error` |
 | `desired_state.json` | Combining the global, stream and node state hashes for one subscription (spec 2.2) | `global`, `stream`, `node` (hashes of strings, or null), `subscription` → `expect`; null fields mean the value given in code |
-| `directives.json` | Validating a directive and what applying it writes (spec 2.1, 5.2) | `builder`, `directive` → `expect`: `ACCEPTED` with the state `key`, wakeup `channel` and `fields` (or the `replay` to run), or `REJECTED` |
+| `directives.json` | Validating a directive and what applying it writes (spec 2.1, 5.2) | `builder`, `directive` → `expect`: `ACCEPTED` with the state `key`, wakeup `channel` and `fields` (or, for the actions `EXECUTE_REPLAY`, `DELETE_DLQ` and `CREATE_STREAM`, the `stream`, `group` and `action` to run), or `REJECTED` |
 | `traceparent.json` | Parsing W3C `traceparent` values read from entries | `traceparent` → `expect` (trace id, span id, flags) or null for invalid |
-| `data_plane.json` | Retry timing and exhaustion, DLQ entries, replay, lane consumer names ([data-plane.md](data-plane.md)) | Grouped by rule rather than one `cases` list: `retry_wait`, `retries_exhausted`, `dead_letter`, `replay`, `lane_consumer` |
+| `data_plane.json` | Retry timing and exhaustion, DLQ entries, replay, lane consumer names, queue wait ([data-plane.md](data-plane.md)) | Grouped by rule rather than one `cases` list: `retry_wait`, `retries_exhausted`, `dead_letter`, `replay`, `lane_consumer`, `queue_wait` |
 
 Rules the vectors pin down that are easy to get wrong in a new language:
 
@@ -65,3 +65,8 @@ A runner is a few lines in each language. The Python one is `sdks/python/tests/t
   every user, so it needs a new key layout rather than an edit.
 - The Relay handshake (milestone 2) will carry the protocol version, so the server knows what
   each worker speaks.
+
+## License
+
+[Apache License 2.0](LICENSE): implement it, copy the schemas and vectors into your own SDK, in
+any project.

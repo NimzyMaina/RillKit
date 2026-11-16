@@ -1,0 +1,8 @@
+{
+  "type": "LOGS_RESPONSE",
+  "request_id": "req_7f3a",
+  "records": [
+    {"ts": "1794669071612", "level": "INFO", "logger": "app.orders", "message": "charging order 1",
+     "consumer": "billing-host-42", "delivery": "1"}
+  ]
+}

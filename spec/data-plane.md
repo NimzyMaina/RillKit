@@ -162,9 +162,13 @@ ZADD <registry key> <expiry ms> <consumer>          expiry ms = (now + ttl) * 10
 ZREMRANGEBYSCORE <registry key> -inf <now ms>
 ```
 
-`ttl` defaults to 60 s. On a clean stop (and when a lane is retired) the consumer deletes its
-heartbeat key and removes itself from the registry. Live consumers are the registry members
-whose score is at least now in milliseconds; nothing ever needs `SCAN`.
+`ttl` defaults to 60 s. A consumer MUST refresh its heartbeat often enough that it never
+expires while running: at least every `ttl/2`. SDKs SHOULD coalesce the writes instead of
+sending them after every message (the Python SDK writes at most once per
+`min(5 s, max(0.5 s, ttl/3))`, so every 5 s by default). On a clean stop (and when a lane is
+retired) the consumer deletes its heartbeat key and removes itself from the registry. Live
+consumers are the registry members whose score is at least now in milliseconds; nothing ever
+needs `SCAN`.
 
 ## 8. Idempotency markers
 
@@ -185,7 +189,46 @@ When trace propagation is on:
   id and a new span id. A publish outside any trace starts a new trace, unless origination is
   turned off.
 
+### 9.1 Attempt timings (vector)
+
+With the control plane on, a consumer records, for every handler attempt:
+
+- `published_at`: the millisecond timestamp in the message id, i.e. when the entry was added.
+- `started_at` and `finished_at`, with `work = finished_at - started_at` measured on a monotonic
+  clock.
+- `wait = max(0, started_at - published_at)` (`queue_wait` in
+  `conformance/data_plane.json`): from publish to the start of the handler. For a retry it
+  includes the time the message waited for its next delivery, so read it together with the
+  delivery count. A negative value (clock skew between the server and the worker) counts as 0.
+
+Per subscription the worker keeps cumulative `attempts_total`, `wait_ms_total` and
+`work_ms_total` and reports them in telemetry (control-plane 5.1). Timings MUST NOT change what
+the handler returns or whether the message is acknowledged. A worker with the control plane off
+records nothing.
+
+### 9.2 Trace records (opt-in)
+
+With `trace_records` on, every attempt that handled an entry carrying a valid `traceparent` adds
+one entry to the trace key of that trace id (control-plane 4.1; TTL one hour, refreshed by every
+append, capped at about 1000 entries):
+
+| Field | Meaning |
+| --- | --- |
+| `trace_id`, `span_id`, `parent_span_id` | The trace; the handler's span; the span named by the entry's `traceparent` (the publisher's) |
+| `stream`, `group`, `message_id`, `delivery` | The attempt: logical stream and group, entry id, delivery number |
+| `consumer`, `node_id` | Who ran it |
+| `published_at`, `started_at`, `finished_at` | Epoch milliseconds; `published_at` comes from the entry id |
+| `outcome` | `ok` (handled and acknowledged), `error` (the handler failed, or the message was nacked) or `dead_letter` (this attempt moved it to the DLQ) |
+
+- No payload, header, log line or exception text is stored: a record is metadata.
+- A missing or invalid `traceparent`, or `trace_records` off, MUST NOT write a record.
+- Failing to write a record MUST NOT fail or retry the message; the attempt keeps its outcome.
+- Records are returned oldest first. Every stream of one trace writes to the same key, which is
+  what makes a trace readable end to end.
+
 ## 10. Not yet specified
 
 - Producer cordoning during maintenance (milestone 3 of the control-plane plan).
 - Codecs other than JSON: a stream's codec must be the same in every language that touches it.
+- Exporting spans to an OpenTelemetry collector: the SDK propagates ids only, and the trace key
+  is RillKit's own record of attempts.

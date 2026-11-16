@@ -288,7 +288,7 @@
         "cmd": "EXECUTE_REPLAY",
         "stream": "orders:eu",
         "group": "billing",
-        "replay": {
+        "action": {
           "count": 10
         }
       }
@@ -316,7 +316,7 @@
         "cmd": "EXECUTE_REPLAY",
         "stream": "orders:eu",
         "group": "billing",
-        "replay": {
+        "action": {
           "set_id": "0"
         }
       }
@@ -667,7 +667,7 @@
         "cmd": "EXECUTE_REPLAY",
         "stream": "orders:eu",
         "group": "billing",
-        "replay": {
+        "action": {
           "count": 100
         }
       }
@@ -1050,7 +1050,7 @@
         "cmd": "EXECUTE_REPLAY",
         "stream": "orders:eu",
         "group": "billing",
-        "replay": {
+        "action": {
           "count": 10
         }
       }
@@ -1079,7 +1079,7 @@
         "cmd": "EXECUTE_REPLAY",
         "stream": "orders:eu",
         "group": "billing",
-        "replay": {
+        "action": {
           "set_id": "0"
         }
       }
@@ -1448,7 +1448,7 @@
         "cmd": "EXECUTE_REPLAY",
         "stream": "orders:eu",
         "group": "billing",
-        "replay": {
+        "action": {
           "count": 100
         }
       }
@@ -1534,6 +1534,945 @@
       "expect": {
         "status": "REJECTED",
         "reason": "target and params must be objects"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY chosen entries; duplicates are dropped",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0",
+            "2-0",
+            "1-0"
+          ]
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ],
+          "data": {}
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY chosen entries with an edited payload",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ],
+          "data": {
+            "2-0": "{\"id\": 2}"
+          }
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ],
+          "data": {
+            "2-0": "{\"id\": 2}"
+          }
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY data needs ids",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 5,
+          "data": {
+            "1-0": "{}"
+          }
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "data can only be given with ids"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY data may only name listed ids",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0"
+          ],
+          "data": {
+            "9-0": "{}"
+          }
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "data names '9-0', which is not in ids"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY data values are strings",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0"
+          ],
+          "data": {
+            "1-0": {
+              "id": 1
+            }
+          }
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "each data value must be a string of at most 1 MB"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY takes one of count, ids or set_id",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 5,
+          "ids": [
+            "1-0"
+          ]
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "EXECUTE_REPLAY takes one of count, ids or set_id"
+      }
+    },
+    {
+      "name": "ids must be entry ids",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "abc"
+          ]
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "'abc' is not a stream entry id like 1718000000000-0"
+      }
+    },
+    {
+      "name": "ids must not be empty",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": []
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "ids must be a list of 1 to 1000 entry ids"
+      }
+    },
+    {
+      "name": "DELETE_DLQ chosen entries",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ]
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "DELETE_DLQ",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ]
+        }
+      }
+    },
+    {
+      "name": "DELETE_DLQ everything",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "all": true
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "DELETE_DLQ",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "all": true
+        }
+      }
+    },
+    {
+      "name": "DELETE_DLQ needs ids or all",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {}
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ needs ids or all: true"
+      }
+    },
+    {
+      "name": "DELETE_DLQ takes ids or all, not both",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0"
+          ],
+          "all": true
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ takes ids or all: true, not both"
+      }
+    },
+    {
+      "name": "DELETE_DLQ all must be true",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "all": "yes"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ takes ids or all: true, not both"
+      }
+    },
+    {
+      "name": "DELETE_DLQ needs a stream",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "global",
+        "params": {
+          "all": true
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ needs target.stream and target.group"
+      }
+    },
+    {
+      "name": "CREATE_STREAM starts at new messages by default",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "CREATE_STREAM",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "CREATE_STREAM",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "start": "$"
+        }
+      }
+    },
+    {
+      "name": "CREATE_STREAM from the beginning",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "CREATE_STREAM",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "start": "0"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "CREATE_STREAM",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "start": "0"
+        }
+      }
+    },
+    {
+      "name": "CREATE_STREAM start is $ or 0",
+      "builder": {
+        "layout": "plain"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "CREATE_STREAM",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "start": "10-0"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "start must be \"$\" (new messages only) or \"0\" (everything)"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY chosen entries; duplicates are dropped",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0",
+            "2-0",
+            "1-0"
+          ]
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ],
+          "data": {}
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY chosen entries with an edited payload",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ],
+          "data": {
+            "2-0": "{\"id\": 2}"
+          }
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "EXECUTE_REPLAY",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ],
+          "data": {
+            "2-0": "{\"id\": 2}"
+          }
+        }
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY data needs ids",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 5,
+          "data": {
+            "1-0": "{}"
+          }
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "data can only be given with ids"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY data may only name listed ids",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0"
+          ],
+          "data": {
+            "9-0": "{}"
+          }
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "data names '9-0', which is not in ids"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY data values are strings",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0"
+          ],
+          "data": {
+            "1-0": {
+              "id": 1
+            }
+          }
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "each data value must be a string of at most 1 MB"
+      }
+    },
+    {
+      "name": "EXECUTE_REPLAY takes one of count, ids or set_id",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "count": 5,
+          "ids": [
+            "1-0"
+          ]
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "EXECUTE_REPLAY takes one of count, ids or set_id"
+      }
+    },
+    {
+      "name": "ids must be entry ids",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "abc"
+          ]
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "'abc' is not a stream entry id like 1718000000000-0"
+      }
+    },
+    {
+      "name": "ids must not be empty",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "EXECUTE_REPLAY",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": []
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "ids must be a list of 1 to 1000 entry ids"
+      }
+    },
+    {
+      "name": "DELETE_DLQ chosen entries",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ]
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "DELETE_DLQ",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "ids": [
+            "1-0",
+            "2-0"
+          ]
+        }
+      }
+    },
+    {
+      "name": "DELETE_DLQ everything",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "all": true
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "DELETE_DLQ",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "all": true
+        }
+      }
+    },
+    {
+      "name": "DELETE_DLQ needs ids or all",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {}
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ needs ids or all: true"
+      }
+    },
+    {
+      "name": "DELETE_DLQ takes ids or all, not both",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "ids": [
+            "1-0"
+          ],
+          "all": true
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ takes ids or all: true, not both"
+      }
+    },
+    {
+      "name": "DELETE_DLQ all must be true",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "all": "yes"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ takes ids or all: true, not both"
+      }
+    },
+    {
+      "name": "DELETE_DLQ needs a stream",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "DELETE_DLQ",
+        "scope": "global",
+        "params": {
+          "all": true
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "DELETE_DLQ needs target.stream and target.group"
+      }
+    },
+    {
+      "name": "CREATE_STREAM starts at new messages by default",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "CREATE_STREAM",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "CREATE_STREAM",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "start": "$"
+        }
+      }
+    },
+    {
+      "name": "CREATE_STREAM from the beginning",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "CREATE_STREAM",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "start": "0"
+        }
+      },
+      "expect": {
+        "status": "ACCEPTED",
+        "cmd": "CREATE_STREAM",
+        "stream": "orders:eu",
+        "group": "billing",
+        "action": {
+          "start": "0"
+        }
+      }
+    },
+    {
+      "name": "CREATE_STREAM start is $ or 0",
+      "builder": {
+        "layout": "hashtag",
+        "tenant": "t-42"
+      },
+      "directive": {
+        "type": "DIRECTIVE",
+        "directive_id": "dir_1",
+        "cmd": "CREATE_STREAM",
+        "scope": "stream",
+        "target": {
+          "stream": "orders:eu",
+          "group": "billing"
+        },
+        "params": {
+          "start": "10-0"
+        }
+      },
+      "expect": {
+        "status": "REJECTED",
+        "reason": "start must be \"$\" (new messages only) or \"0\" (everything)"
       }
     }
   ]

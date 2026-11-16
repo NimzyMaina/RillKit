@@ -1,5 +1,5 @@
 {
-  "description": "Data-plane rules (spec/data-plane.md): retry timing, retry exhaustion, DLQ entries, replay, lane consumer names.",
+  "description": "Data-plane rules (spec/data-plane.md): retry timing, retry exhaustion, DLQ entries, replay, lane consumer names, queue wait.",
   "retry_wait": [
     {
       "claim_idle_ms": 60000,
@@ -263,6 +263,33 @@
       "consumer": "billing-host-42",
       "index": 2,
       "expect": "billing-host-42-2"
+    }
+  ],
+  "queue_wait": [
+    {
+      "published_ms": 1794669071538,
+      "started_ms": 1794669071603,
+      "expect_ms": 65.0
+    },
+    {
+      "published_ms": 1794669071538,
+      "started_ms": 1794669071538,
+      "expect_ms": 0.0
+    },
+    {
+      "published_ms": 1794669071538,
+      "started_ms": 1794669071400,
+      "expect_ms": 0.0
+    },
+    {
+      "published_ms": 0,
+      "started_ms": 1,
+      "expect_ms": 1.0
+    },
+    {
+      "published_ms": 1794669071538,
+      "started_ms": 1794669671538,
+      "expect_ms": 600000.0
     }
   ]
 }

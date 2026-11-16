@@ -3734,6 +3734,41 @@
         }
       },
       "expect_error": "the tenant must not be empty"
+    },
+    {
+      "builder": {
+        "layout": "plain"
+      },
+      "kind": "trace",
+      "args": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      },
+      "expect": "rillkit:trace:4bf92f3577b34da6a3ce929d0e0e4736",
+      "slot": 2050
+    },
+    {
+      "builder": {
+        "layout": "hashtag"
+      },
+      "kind": "trace",
+      "args": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      },
+      "expect": "rk:{:}:trace:4bf92f3577b34da6a3ce929d0e0e4736",
+      "slot": 5913
+    },
+    {
+      "builder": {
+        "layout": "hashtag",
+        "prefix": "shop",
+        "tenant": "t-42"
+      },
+      "kind": "trace",
+      "args": {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      },
+      "expect": "shop:{t-42:}:trace:4bf92f3577b34da6a3ce929d0e0e4736",
+      "slot": 14275
     }
   ]
 }
