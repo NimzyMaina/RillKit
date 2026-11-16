@@ -25,10 +25,13 @@ plane. **Compatibility between implementations is the main thing to protect.**
 | `spec/protocol/v1/` | JSON Schemas of the control-plane messages, plus examples. Types in every language are generated from these. |
 | `spec/conformance/` | Test vectors every SDK must pass |
 | `sdks/python/` | The Python SDK (`rillkit` on PyPI): `src/rillkit`, `tests`, `pyproject.toml`, `uv.lock` |
+| `server/` | `rillkit-server` (Python 3.11+, FastAPI, Postgres): `src/rillkit_server`, `tests`, `API.md` (the HTTP contract the dashboard uses), `Dockerfile` |
+| `dashboard/` | The dashboard (React, TypeScript, Vite, shadcn/ui, TanStack Query); its own npm project |
+| `examples/demo/`, `compose.yaml` | A local control plane with a demo fleet: `docker compose up --build` |
 | `docs/` | The documentation site (VitePress), currently for the Python SDK |
 | `scripts/test-cluster.sh` | Starts a six-node Redis or Valkey Cluster in Docker for tests |
 | `scripts/build-docs.mjs` | Builds the versioned docs site (one snapshot per `vX.Y.Z` tag) |
-| `.github/workflows/` | `python.yml` (lint, tests, build), `release.yml` (PyPI), `docs.yml` (Pages) |
+| `.github/workflows/` | `python.yml` (SDK), `server.yml` (server tests and Docker images), `dashboard.yml`, `release.yml` (PyPI), `docs.yml` (Pages) |
 
 Python SDK modules (`sdks/python/src/rillkit/`):
 
@@ -42,7 +45,25 @@ Python SDK modules (`sdks/python/src/rillkit/`):
 | `controlplane.py` | `ControlPlane` (`broker.control`): desired state, wakeups, heartbeats, telemetry, directives; the pure rules `resolve_desired` and `plan_directive` |
 | `clients.py` | Everything that differs between redis-py and valkey-py, standalone and cluster |
 | `middleware.py`, `tracing.py`, `logs.py` | Middleware, including `Idempotent`, `TraceContext` and `LogCapture` |
+| `relay.py` | The outbound Relay client (`relay` mode): handshake, telemetry, directives, log requests |
 | `message.py`, `stream.py`, `codec.py`, `ack.py`, `exceptions.py` | Small value types |
+
+## Licensing
+
+The repository is licensed by directory (see `LICENSE`):
+
+| Directory | License | Contributions |
+| --- | --- | --- |
+| `sdks/`, `spec/`, `docs/`, `examples/`, `scripts/` | Apache License 2.0 | Sign off each commit (`git commit -s`), certifying the [Developer Certificate of Origin](https://developercertificate.org) |
+| `server/`, `dashboard/` | FSL-1.1-ALv2 | Require the RillKit Contributor License Agreement, which lets the project relicense or offer commercial licenses. Until it is published, pull requests from outside contributors to these directories cannot be merged |
+
+- Code never moves from `server/` or `dashboard/` into an Apache-licensed directory without the
+  maintainer's decision: that would relicense it.
+- The SDKs must never import from `server/` or `dashboard/`. The server may use the SDKs.
+- New dependencies must have licenses compatible with the directory they are added to (no
+  GPL or AGPL dependencies in the SDKs).
+- Each licensed directory carries its own LICENSE file, which its packages ship; keep the
+  package metadata (`license` in `pyproject.toml` and `package.json`) in step with it.
 
 ## 2. Rules that are never broken
 
@@ -144,6 +165,22 @@ one test that validates real messages.
 Docs (from the repository root): `npm install`, then `npx vitepress build docs`. The build fails
 on dead links, so run it after any docs change.
 
+### The server and the dashboard
+
+```bash
+docker run -d --rm --name rk-postgres -e POSTGRES_PASSWORD=postgres -p 5439:5432 postgres:17
+cd server && uv sync --group dev
+uv run ruff check src tests && uv run mypy src && uv run pytest -q   # needs Redis on 6390 too
+
+cd dashboard && npm ci && npm run build      # type-check and build
+npm run dev:mock                             # the dashboard against an in-memory fake API
+
+docker compose up --build                    # everything together, from the repository root
+```
+
+The server's tests start real replicas in-process and connect real SDK workers over the Relay;
+a change to the SDK's control plane must keep them passing too.
+
 ### Writing tests
 
 - Every behaviour change or fix comes with tests for the normal case and the edge cases.
@@ -212,6 +249,15 @@ Subclass `BaseMiddleware` (`on_receive`, `consume_scope`, `publish_scope`, `afte
 Keep per-message state on the `Message` or in a `contextvars.ContextVar`, never on the
 instance. Extra entry fields go in `PublishCommand.headers`; names starting with `x-` are
 reserved. Document it in `docs/reference/middleware.md`.
+
+### Change the Relay protocol or the HTTP API
+
+- Relay frames (worker <-> server): the schema in `spec/protocol/v1/`, an example in
+  `spec/protocol/v1/examples/`, the prose in `spec/control-plane.md` section 5.4, then both
+  sides: `sdks/python/src/rillkit/relay.py` and `server/src/rillkit_server/gateway.py`. Within
+  v1 only add optional fields or new frame types; both sides ignore what they do not know.
+- HTTP API (dashboard <-> server): `server/API.md` first, then `server/src/rillkit_server/api.py`,
+  `server/tests/`, and the dashboard's `src/api/types.ts` and `src/api/mock.ts`.
 
 ### Release the Python SDK
 
