@@ -26,6 +26,7 @@ broker = Broker.from_env()
 | `RILLKIT_PASSWORD` | `REDIS_PASSWORD` | none | used when no URL is set |
 | `RILLKIT_SSL` | `REDIS_SSL` | off | `1`, `true` or `yes` (any case) turn TLS on. Used when no URL is set |
 | `RILLKIT_SOCKET_TIMEOUT` | `REDIS_SOCKET_TIMEOUT` | `15` | seconds, or `none` for no timeout. Must be longer than `block_ms` (see below) |
+| `RILLKIT_MAX_CONNECTIONS` | `REDIS_MAX_CONNECTIONS` | client default | Connection-pool cap. **redis-py 8 defaults to 100**; raise it for producers with many threads or consumers with 100+ lanes |
 | `RILLKIT_BACKEND` | | `redis` | The client library: `redis` (redis-py) or `valkey` (valkey-py) |
 | `RILLKIT_MODE` | | `standalone` | `standalone` or `cluster` |
 | `RILLKIT_CLUSTER_NODES` | | none | Cluster seed nodes, `host:port,host:port` |
@@ -33,7 +34,14 @@ broker = Broker.from_env()
 | `RILLKIT_KEY_PREFIX` | | none | A prefix for hash-tagged keys, for several apps on one server. Implies `hashtag` |
 | `RILLKIT_TENANT` | | none | A tenant id inside every hash tag. Implies `hashtag` with the prefix `rk` |
 | `RILLKIT_CONFIG` | | none | Path of a [config file](#config-file) |
-| `RILLKIT_CONTROL` | | `off` | `off`, `valkey` or `relay`, see [Control plane](/guide/control-plane) |
+| `RILLKIT_CONTROL` | | `off` | `off` or `relay`, see [Control plane](/guide/control-plane) |
+| `RILLKIT_CONTROL_URL` | | none | `relay` mode: the url of `rillkit-server` |
+| `RILLKIT_API_KEY` | | none | `relay` mode: the worker's API key |
+| `RILLKIT_NODE_ID` | | `<hostname>-<pid>` | The node's name on the control plane |
+| `RILLKIT_CAPTURE_LOGS` | | off | Store each handler run's logs for the dashboard ([log capture](/reference/middleware#logcapture)) |
+| `RILLKIT_INSPECT_MESSAGES` | | off | Let the dashboard show payloads and DLQ error texts, and edit DLQ entries ([control plane](/guide/control-plane#what-the-dashboard-may-see)) |
+| `RILLKIT_TRACE_RECORDS` | | off | Keep per-trace records, so the dashboard can draw a trace across streams ([control plane](/guide/control-plane#tracing-and-logs)) |
+| `RILLKIT_CONTROL_INSECURE` | | off | Allow a `ws://`/`http://` control url on a non-local host |
 
 A URL or separate fields, whichever suits your platform:
 
@@ -125,7 +133,9 @@ password_env = "CACHE_PASSWORD"   # the variable that holds it, or password_file
 layout = "hashtag"      # or prefix = "shop", tenant = "t-42"
 
 [control]
-mode = "valkey"
+mode = "relay"
+url = "https://rillkit.example.com"
+api_key_env = "RILLKIT_API_KEY"
 ```
 
 ```python
@@ -215,14 +225,29 @@ If `url` is set, `host`, `port`, `db` and `ssl` are ignored (the URL says all of
 ```python
 from rillkit import Broker, Settings
 
-broker = Broker(settings=Settings.from_env(client_kwargs={
-    "socket_connect_timeout": 5,
-    "socket_timeout": 15,
-    "health_check_interval": 30,
-    "max_connections": 50,
-    "ssl_ca_certs": "/etc/ssl/certs/ca.pem",
-}))
+broker = Broker(settings=Settings.from_env(
+    max_connections=500,  # or RILLKIT_MAX_CONNECTIONS=500
+    client_kwargs={
+        "socket_connect_timeout": 5,
+        "socket_timeout": 15,
+        "health_check_interval": 30,
+        "ssl_ca_certs": "/etc/ssl/certs/ca.pem",
+    },
+))
 ```
+
+::: warning The connection pool is capped at 100 with redis-py 8
+A `Broker` shares one client and therefore one pool. Every command in flight borrows a
+connection; when the pool is empty and its cap is reached, the next command fails with
+`Too many connections` instead of waiting. A producer with many threads (or a web app) can hit
+that quickly; so can a consumer with more than 100 lanes.
+
+Set `max_connections` (`RILLKIT_MAX_CONNECTIONS`) to peak concurrent commands plus headroom. It
+is per process: with several worker processes, each gets its own pool, so keep
+`processes × max_connections` under the server's `maxclients`. If you would rather wait than
+fail, inject a client built on `BlockingConnectionPool` with `Broker(client=...)`. valkey-py
+defaults its pool to effectively unlimited, so this only bites redis-py users.
+:::
 
 The options are checked against the client that will be built, so a typo fails at once instead of being dropped:
 

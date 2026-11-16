@@ -6,7 +6,7 @@ def handle_order(order: dict):
     ...
 ```
 
-`subscribe` registers the function and returns it unchanged. Each subscription runs its own consumer thread, and that thread handles **one message at a time**, in order. To process more in parallel, run more workers (see [Operations](/guide/operations#scaling)), not more threads.
+`subscribe` registers the function and returns it unchanged. Each subscription runs `concurrency` consumer lanes (default `1`), each a thread that handles **one message at a time**; within a lane, order is kept. Raise `concurrency` to process one stream in parallel inside a process, or run more workers (see [Operations](/guide/operations#scaling)); ordering is not guaranteed across lanes.
 
 ## Subscribe options
 
@@ -26,6 +26,7 @@ def handle_order(order: dict):
 | `heartbeat` | `True` | Write a heartbeat key so [`active_workers`](/guide/operations#heartbeat-and-active-workers) can see this worker. |
 | `heartbeat_ttl` | `60` | Seconds before the heartbeat key expires. |
 | `group_start_id` | `"0"` | Where a **new** group starts reading: `"0"` is the beginning of the stream, `"$"` is only entries added from now on. Ignored if the group already exists. |
+| `concurrency` | `1` | Consumer loops (lanes) for this stream, named `<consumer>`, `<consumer>-1`, ... A control plane can change it while running. |
 
 ## Handler signature rules
 

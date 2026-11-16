@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { withBase } from 'vitepress'
+import RillArt from './RillArt.vue'
 </script>
 
 <template>
   <section class="rk-start" aria-labelledby="rk-start-h">
+    <div class="rk-start__rill"><RillArt :seed="11" :trunks="[0.3, 0.55, 0.8]" :max-paths="16" :height="600" /></div>
     <div class="rk-wrap rk-start__grid">
       <div>
-        <h2 id="rk-start-h" class="rk-h2">Running in about five minutes</h2>
+        <h2 id="rk-start-h" class="rk-h2">Running in about <em>five minutes.</em></h2>
         <p class="rk-sub">
           You need Python 3.9 or newer and a Redis or Valkey server you can reach. Local Docker is fine. The guide walks through the
           same steps with more explanation, then covers retries, the DLQ and running several workers.
@@ -14,6 +16,7 @@ import { withBase } from 'vitepress'
         <p class="rk-links">
           <a class="rk-btn rk-btn--primary" :href="withBase('/guide/getting-started')">Read the getting-started guide</a>
           <a :href="withBase('/examples/')">Examples</a>
+          <a :href="withBase('/guide/server')">The control plane</a>
           <a :href="withBase('/reference/broker')">API reference</a>
         </p>
       </div>

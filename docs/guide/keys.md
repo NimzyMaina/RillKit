@@ -274,7 +274,7 @@ When one Redis or Valkey server holds data for several tenants:
 
 ## Finding the real keys
 
-- `broker.keys.stream(s)`, `broker.keys.dlq(s)`, `broker.keys.heartbeat(s, group, consumer)`, `broker.keys.consumers(s, group)` and `broker.keys.idempotency(s, key)` return them.
+- `broker.keys.stream(s)`, `broker.keys.dlq(s)`, `broker.keys.heartbeat(s, group, consumer)`, `broker.keys.consumers(s, group)`, `broker.keys.idempotency(s, key)` and `broker.keys.trace(trace_id)` return them.
 - `msg.key` is the physical key of the stream a message came from (`msg.stream.name` and the DLQ's `x-stream` field stay the logical name).
 - The DLQ log line names the physical key: `moving message ... to rk:{orders}:dlq: ...`.
 - In `redis-cli` or `valkey-cli`, quote keys with braces: `XLEN 'rk:{orders}:stream'`, and add `-c` on a cluster.
@@ -300,11 +300,13 @@ A [managed worker](/guide/control-plane) also uses these. With the control plane
 | Broadcast wakeups | channel | `rillkit:ctl:broadcast` | `shop:{t-42:}:ctl:broadcast` |
 | Node wakeups | channel | `rillkit:ctl:node:<node>` | `shop:{t-42:}:ctl:node:<node>` |
 | Per-message logs | STREAM, TTL | `rillkit:logs:orders:<id>` | `shop:{t-42:orders}:logs:<id>` |
+| Per-trace records | STREAM, TTL 1 h | `rillkit:trace:<trace id>` | `shop:{t-42:}:trace:<trace id>` |
 | Producer cordon (reserved) | STRING | `rillkit:cordon:orders` | `shop:{t-42:orders}:cordon` |
 | Cordon buffer (reserved) | STREAM | `rillkit:cordon:orders:buffer` | `shop:{t-42:orders}:cordon:buffer` |
 
 - The control keys of one namespace share a slot (the tag `{<tenant>:}`, or `{:}` without a tenant), so a directive's dedup check and state write are one transaction on a cluster. No stream can produce that tag, since stream names are non-empty and their colons are encoded.
 - Logs and cordon keys share their stream's slot.
+- Trace keys live with the control keys (under `{<tenant>:}`), because one trace crosses streams. They need no new Redis command: `XADD`, `XRANGE` and `EXPIRE` are already in the [tenant ACL rule](#several-tenants-on-one-server).
 - With `PlainKeys`, stream names in these keys are encoded (`%`, `:`), and `rillkit:` is reserved: do not name streams `rillkit:...`.
 - Custom `KeyBuilder`s get the `PlainKeys` names unless they override the methods.
 

@@ -90,4 +90,5 @@ Because the example publishes on every start, running it repeatedly keeps adding
 - Want to see a handler fail and recover? [Retries and the DLQ](/guide/retries-and-dlq).
 - Want something you can copy? Browse the [examples](/examples/).
 - Running on Valkey or a cluster? [Configuration](/guide/configuration) and [Redis and Valkey Cluster](/guide/cluster).
+- Want to watch and steer your workers from a dashboard? [Run the server](/guide/server), then [connect your workers](/guide/control-plane). The demo in `deploy/demo.yaml` starts it with one download.
 - Upgrading? [Upgrading](/guide/upgrading) has the notes, and the version picker in the top bar opens the docs of earlier releases. [All versions](/versions) lists every release with a link to what changed since the one before.

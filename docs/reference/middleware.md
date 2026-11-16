@@ -81,13 +81,13 @@ broker = Broker(middlewares=[LogCapture(ttl=24 * 3600, max_records=200, loggers=
 records = read_logs(broker, "orders", msg_id)
 ```
 
-Stores the log records emitted while a handler runs (in its thread) in a stream per message, the key builder's `logs(stream, id)` key, which expires after `ttl` seconds. Each record has `ts`, `level`, `logger`, `message`, `consumer`, `delivery`, and when present `traceparent` and `exc_type` (or `exc`). An exception raised by the handler is recorded as an `ERROR`.
+Stores the log records emitted while a handler runs (in its thread) in a stream per message, the key builder's `logs(stream, id)` key, which expires after `ttl` seconds. Each record has `ts`, `level`, `logger`, `message`, `consumer`, `delivery`, and when present `traceparent`, `exc_type` (the exception class) and, with `exceptions=True`, `exc` (its message and traceback). `ts` is epoch milliseconds as a string. An exception raised by the handler is recorded as an `ERROR`.
 
 | Option | Default | |
 | --- | --- | --- |
 | `loggers` | every logger | Capture only these loggers and their children: `["app"]` takes `app.orders`, not `application` |
 | `redact` | none | Called with each record before it is stored; return a changed record, or `None` to drop it |
-| `exceptions` | `False` | Store exception messages and tracebacks (`exc`). Off, only the class name is kept (`exc_type`), because exception text often holds message data |
+| `exceptions` | `False` | Also store exception messages and tracebacks (`exc`). The class name (`exc_type`) is always kept; the text is off by default because it often holds message data |
 
 ::: warning Logs can contain personal data
 Whatever a handler logs is copied to Redis or Valkey for `ttl` seconds, and a control plane may show it on its dashboard. Capture only the loggers you need, and redact anything sensitive.

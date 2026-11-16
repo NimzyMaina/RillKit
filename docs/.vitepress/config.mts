@@ -10,8 +10,8 @@ export default defineConfig({
   head: [['link', { rel: 'icon', href: '/RillKit/logo.svg' }]],
 
   markdown: {
-    // real editor themes: VS Code's default light, and Night Owl (blue-black) for dark
-    theme: { light: 'light-plus', dark: 'night-owl' },
+    // Vitesse: muted greens and ambers that sit well on the cream and ink surfaces
+    theme: { light: 'vitesse-light', dark: 'vitesse-dark' },
     lineNumbers: true,
     config(md) {
       // Put the file name (the `[name.py]` after the language) in an editor tab above every block.
@@ -32,8 +32,9 @@ export default defineConfig({
   themeConfig: {
     logo: '/logo.svg',
     nav: [
-      { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
+      { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/(?!(server|dashboard|control-plane))' },
       { text: 'Examples', link: '/examples/', activeMatch: '/examples/' },
+      { text: 'Control plane', link: '/guide/server', activeMatch: '/guide/(server|dashboard|control-plane)' },
       { text: 'Reference', link: '/reference/broker', activeMatch: '/reference/' },
       { text: 'PyPI', link: 'https://pypi.org/project/rillkit/' },
       { text: 'GitHub', link: 'https://github.com/NimzyMaina/RillKit' },
@@ -67,9 +68,17 @@ export default defineConfig({
             { text: 'Keys', link: '/guide/keys' },
             { text: 'Redis and Valkey Cluster', link: '/guide/cluster' },
             { text: 'Operations', link: '/guide/operations' },
-            { text: 'Control plane', link: '/guide/control-plane' },
+            { text: 'Performance', link: '/guide/performance' },
             { text: 'Testing', link: '/guide/testing' },
             { text: 'Upgrading', link: '/guide/upgrading' },
+          ],
+        },
+        {
+          text: 'Control plane',
+          items: [
+            { text: 'Connecting workers', link: '/guide/control-plane' },
+            { text: 'Running the server', link: '/guide/server' },
+            { text: 'The dashboard', link: '/guide/dashboard' },
           ],
         },
       ],
@@ -102,6 +111,7 @@ export default defineConfig({
             { text: 'AckPolicy', link: '/reference/ack-policy' },
             { text: 'Middleware', link: '/reference/middleware' },
             { text: 'Settings', link: '/reference/settings' },
+            { text: 'Control', link: '/reference/control' },
             { text: 'Key builders', link: '/reference/keys' },
             { text: 'Exceptions', link: '/reference/exceptions' },
           ],
@@ -121,7 +131,7 @@ export default defineConfig({
     ],
 
     footer: {
-      message: 'RillKit is released under the MIT License.',
+      message: 'The RillKit SDKs are released under the Apache License 2.0.',
       copyright: 'Copyright © Nimrod Maina',
     },
 

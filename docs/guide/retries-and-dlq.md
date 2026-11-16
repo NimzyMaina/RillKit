@@ -173,6 +173,14 @@ moved = broker.replay_dlq("orders", count=100)
 
 The last part of the run above shows it: after setting `fixed = True`, `replay_dlq` moved the broken job, the handler succeeded on delivery 1, and the DLQ is empty.
 
+To replay chosen entries, or fix a payload first, use `replay_dlq_entries`; `delete_dlq_entries` and `purge_dlq` remove entries (see the [Broker reference](/reference/broker#operations)):
+
+```python
+moved, missing = broker.replay_dlq_entries("orders", [entry_id], {entry_id: '{"id": 7, "amount": 12.5}'})
+```
+
+The [dashboard](/guide/dashboard#dlq) does all of this from the browser, with each entry's error and logs alongside.
+
 ## Decode errors skip retries
 
 If a message cannot be decoded, retrying cannot help, so RillKit dead-letters it on the first delivery. That covers:
@@ -224,3 +232,20 @@ When a message was already pending (for instance after a worker crash) and has b
 ## Skipping retries
 
 Some messages can never succeed, so retrying them only wastes attempts. Call `msg.reject("reason")` or `raise RejectMessage("reason")` and the message goes to the DLQ as soon as the handler finishes, with `x-deliveries` unchanged and `reason` in `x-error`. Decode and validation failures take the same path automatically. `nack` is the opposite: "try again later".
+
+## The DLQ does not expire
+
+Dead-lettered entries stay until something replays or deletes them. That is deliberate: a DLQ is
+for inspecting and replaying failures, and a TTL would silently discard them. It also means a
+broken handler can grow the DLQ without bound. Measure `XLEN` on each DLQ (the dashboard shows
+it), alert on sustained growth, and choose one of:
+
+- **Replay** after a fix: `broker.replay_dlq(stream)` or the dashboard. A local benchmark replayed
+  about 3,000 entries/s from one process; very large replays are still extra Redis work, so run
+  them off-peak or in batches.
+- **Delete** entries you will never replay, or **purge** the DLQ from the dashboard.
+- **Trim** only if you accept losing the oldest failures: the DLQ is an ordinary stream, so it
+  can be capped with `XADD MAXLEN` by whatever writes it, but RillKit itself writes it without a
+  cap.
+
+Monitor the DLQ alongside lag and pending messages; see [operations](/guide/operations#what-to-watch).

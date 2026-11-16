@@ -2,34 +2,64 @@
 
 A control plane can pause, resume, drain and scale your workers while they run. It is optional and **off by default**: off, RillKit is the plain library, with no extra keys, connections, threads or log handlers.
 
+This page is about the workers' side: how they connect, what they do in each state, and how directives reach them. [Running the server](/guide/server) sets up `rillkit-server`; [the dashboard](/guide/dashboard) is a tour of what you can do with it.
+
 ## Turning it on
 
-| Mode | What the worker does |
-| --- | --- |
-| `off` (default) | Consumes its streams on its own. |
-| `valkey` | Reads its desired state from control keys on your Redis or Valkey server before polling, and listens for changes. Something with access to the server writes that state: `rillkit-server`, or `broker.control.apply(...)` from your own tooling. |
-| `relay` | `valkey` plus an outbound connection to a RillKit server. The Relay client is not in this release yet, so a broker refuses to start in this mode. |
-
-Strongest first: code, then the environment, then the [config file](/guide/configuration#config-file).
-
-::: code-group
-```bash [Environment]
-export RILLKIT_CONTROL=valkey
-export RILLKIT_NODE_ID=orders-worker-1    # optional, default <hostname>-<pid>
-```
-```python [Code]
-from rillkit import Broker, Control
-
-broker = Broker.from_env(control=Control(mode="valkey", node_id="orders-worker-1"))
-```
-```toml [rillkit.toml]
-[control]
-mode = "valkey"
-node_id = "orders-worker-1"
-```
-:::
+Control is off by default. Turn it on with `Control(mode="relay", ...)` or `RILLKIT_CONTROL=relay`; sources are, strongest first, code, then the environment, then the [config file](/guide/configuration#config-file). The next section has the connection variables.
 
 `Broker(...)` and `Broker.from_env()` read `RILLKIT_CONTROL` (and the config file) when you pass no `control=`.
+
+## Connecting to rillkit-server
+
+[`rillkit-server`](https://github.com/NimzyMaina/RillKit/tree/main/server) is the control plane with a dashboard. Workers connect out to it, so they need no inbound port:
+
+```bash
+pip install "rillkit[control]"
+export RILLKIT_CONTROL=relay
+export RILLKIT_CONTROL_URL=https://rillkit.example.com   # the server's public url
+export RILLKIT_API_KEY=rk_...                             # created in the dashboard, shown once
+export RILLKIT_TENANT=t-42                                # only if the tenant enforces its keys
+```
+
+- The worker sends its telemetry every few seconds, applies the directives the server sends (each exactly once), and answers requests for a message's captured logs.
+- If the server is unreachable, or refuses the worker (unknown or revoked key, wrong tenant), the worker logs an error, **keeps consuming** under the last stored state, and retries with backoff (1 s doubling to 30 s).
+- The url must use `wss://` or `https://`. Plain `ws://` or `http://` is accepted for `localhost`, or anywhere with `RILLKIT_CONTROL_INSECURE=1` (`Control(insecure=True)`), which sends the API key unencrypted: only on a private network, such as a local Docker Compose setup.
+- `broker.control.relay.connected` is a `threading.Event` set while the session is up.
+
+To try it all locally, download the demo and start it; no clone needed:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/NimzyMaina/RillKit/main/deploy/demo.yaml
+docker compose -f demo.yaml up -d
+```
+
+That starts the server, its dashboard at `http://localhost:8080`, and a small demo fleet using published images.
+
+## What the dashboard may see
+
+Workers decide what leaves them. By default the dashboard sees ids, sizes, delivery states, attempt timings and trace ids of messages, and the reason a DLQ entry failed only as its exception class: never message contents. Three switches open more:
+
+| Variable | `Control(...)` | Shows |
+| --- | --- | --- |
+| `RILLKIT_INSPECT_MESSAGES=true` | `inspect_messages=True` | message payloads and DLQ error texts; lets you edit a DLQ entry before replaying it |
+| `RILLKIT_CAPTURE_LOGS=true` | `capture_logs=True` | what handlers logged for each message ([log capture](/reference/middleware#logcapture)) |
+| `RILLKIT_TRACE_RECORDS=true` | `trace_records=True` | a trace timeline across streams, from one record per handler attempt (metadata only, kept for an hour) |
+
+Each worker announces them when it connects, and the dashboard explains how to turn them on where they are off.
+
+## The DLQ from the dashboard, or from code
+
+The dashboard pages through a stream's DLQ and replays or deletes entries, one, several or all, and can replay an entry with an edited payload (to fix a message that can never succeed as it is). Each change is a directive, so it is applied once and listed in Activity. The same operations are on the broker:
+
+```python
+broker.replay_dlq("orders", count=100)                       # the oldest 100
+broker.replay_dlq_entries("orders", ["1794765340386-0"])      # chosen entries
+broker.replay_dlq_entries("orders", [entry_id], {entry_id: '{"id": 7, "amount": 12.5}'})  # edited
+broker.delete_dlq_entries("orders", [entry_id])
+broker.purge_dlq("orders")
+broker.create_group("invoices", "mailer", start="0")           # stream and group, if missing
+```
 
 ## States
 
@@ -46,47 +76,14 @@ A booting worker reads the state before its first poll, so a new container in a 
 
 ## Scopes
 
-Desired state is stored at three scopes: global (the namespace), a stream and group, and a node. A node directive can also name one stream and group on that node.
+Desired state is stored at three scopes: global (the namespace), a stream and group, and a node. A per-node override can also name one stream and group on that node.
 
 - **State:** the most restrictive scope wins. A paused stream stays paused when the global state is `RUNNING`, and a global pause pauses every stream.
 - **Concurrency, `block_ms`, `batch_size`:** the most specific scope wins, over the values given to `subscribe()`. `block_ms` is still capped below the client's socket timeout.
 
 ## Concurrency
 
-`subscribe(..., concurrency=n)` runs `n` consumer loops (threads) for a stream, named `<consumer>`, `<consumer>-1`, ... The default is 1, as before. A `SET_CONCURRENCY` directive changes it at run time: new loops start right away, and loops that are no longer needed finish their batch, then remove their heartbeat.
-
-## Directives
-
-```python
-ack = broker.control.apply({
-    "type": "DIRECTIVE",
-    "directive_id": "dir_99812",
-    "cmd": "SET_CONCURRENCY",
-    "scope": "stream",
-    "target": {"stream": "orders", "group": "billing"},
-    "params": {"concurrency": 4, "batch_size": 25, "poll_ms": 200},
-})
-# {"type": "DIRECTIVE_ACK", "directive_id": "dir_99812", "node_id": "...",
-#  "status": "APPLIED", "current_state": {"concurrency": 4, "state": "RUNNING"}}
-```
-
-| `cmd` | `params` |
-| --- | --- |
-| `SET_STATE` | `state`: `RUNNING`, `PAUSED`, `MAINTENANCE` or `DRAINING` |
-| `MAINTENANCE_ON`, `MAINTENANCE_OFF` | none (same as `SET_STATE` `MAINTENANCE` / `RUNNING`) |
-| `SET_CONCURRENCY` | `concurrency` (1 to 256), optional `batch_size` and `block_ms` (or `poll_ms`) |
-| `SET_POLL_CONFIG` | `block_ms` (or `poll_ms`) and/or `batch_size` |
-| `EXECUTE_REPLAY` | `count` (default 100): move that many DLQ entries back, as `replay_dlq`; or `set_id`: `XGROUP SETID` the group. Needs `target.stream` and `target.group` |
-
-`scope` is `global`, `stream` (with `target.stream` and `target.group`) or `node` (with `target.node_id`, and optionally a stream and group).
-
-Directives are checked strictly, the same way in every RillKit SDK: commands, scopes and states are exact-case, and numbers must be JSON integers (`2.5`, `"12"` and `true` are rejected, not converted). The JSON Schemas and conformance vectors that define this are in the repository's [`spec/`](https://github.com/NimzyMaina/RillKit/tree/main/spec) directory.
-
-Any node can apply any directive. It is stored in the matching state key, and a wakeup is published on the broadcast channel (or the target node's channel); every node it concerns re-reads its state immediately. Each worker also re-reads every `refresh_interval` seconds (default 30), in case a wakeup was lost.
-
-**Each directive is applied once.** Its id is recorded for 60 seconds; applying it again returns status `DUPLICATE`. When the dedup key and the state key share a slot (always on a single server, and with `HashTagKeys`), the check and the write are one transaction. A malformed directive returns `REJECTED`, an error while applying it `FAILED`, both with an `error`.
-
-On a cluster, wakeups use sharded Pub/Sub (`SPUBLISH`/`SSUBSCRIBE`): the channels carry the namespace's control tag, so they reach one shard only.
+`subscribe(..., concurrency=n)` runs `n` consumer loops (threads) for a stream, named `<consumer>`, `<consumer>-1`, ... The default is 1, as before. The control plane can change it at run time: new loops start right away, and loops that are no longer needed finish their batch, then remove their heartbeat.
 
 ## Node heartbeats and telemetry
 
@@ -100,15 +97,20 @@ Each managed worker writes a heartbeat every `heartbeat_interval` seconds (defau
   "workers": {"active": 4, "in_flight": 1, "state": "RUNNING", "poll_ms": 5000,
               "batch_size": 10, "cpu_pct": 24.5, "mem_mb": 142.0},
   "streams": [{"stream": "orders", "group": "billing", "stream_key": "rk:{orders}:stream",
-               "dlq_key": "rk:{orders}:dlq", "lag": 4820, "pending": 12, "ack_rate_sec": 38.5}]
+               "dlq_key": "rk:{orders}:dlq", "lag": 4820, "pending": 12, "ack_rate_sec": 38.5,
+               "attempts_total": 1840, "wait_ms_total": 2145600.0, "work_ms_total": 73600.0}]
 }
 ```
 
-`mem_mb` is reported on Linux only.
+`mem_mb` is reported on Linux only. `attempts_total`, `wait_ms_total` and `work_ms_total` are the attempt timings: handler runs, their summed wait from publish to handler start, and their summed handler time.
 
 ## Tracing and logs
 
 A managed broker adds the [`TraceContext`](/reference/middleware#tracecontext) middleware, so W3C `traceparent` headers follow messages across streams.
+
+**Attempt timings are always on with the control plane.** For every handler run the worker records how long the message waited from publish to the start of the handler and how long the handler took, and reports the running totals in its telemetry. The dashboard turns them into the **Time per message** chart on a stream: a growing queue wait with a flat handler time means the stream needs more workers; a growing handler time means the handler (or something it calls) is the bottleneck. These are counts and durations, never message contents.
+
+**Per-trace records are opt-in.** `Control(trace_records=True)`, `RILLKIT_TRACE_RECORDS=true` or `trace_records = true` under `[control]` stores one small entry per handler attempt in a stream keyed by the message's trace id: ids, stream and group, consumer, node, delivery number, timestamps and outcome. The key expires an hour after the trace's last attempt. Opening a message in the dashboard then shows **View trace**: every attempt of that trace in order, across every stream it touched, with queue wait against handler time. No payload, header, log line or exception text is stored, and the server does not keep the records: a connected worker reads them when you ask.
 
 Log capture is opt-in. Handler logs often contain message data, and captured logs are stored in your Redis or Valkey and shown to anyone with dashboard access. Turn it on with `Control(capture_logs=True)`, `RILLKIT_CAPTURE_LOGS=true` or `capture_logs = true` under `[control]`: each handler run's log records are then kept for a day in a stream per message (`read_logs(broker, stream, msg_id)`), without exception messages or tracebacks. To choose loggers, redact records or keep exception text, add [`LogCapture(...)`](/reference/middleware#logcapture) yourself instead. Both middleware work without the control plane too.
 

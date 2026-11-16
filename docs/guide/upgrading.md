@@ -4,6 +4,30 @@
 
 The version picker in the top bar switches between the latest docs and the docs of every release, keeping you on the same page when it exists there. [All versions](/versions) lists each release with its tag, its docs, the release notes when there are any, and a GitHub compare link to the release before it, such as `https://github.com/NimzyMaina/RillKit/compare/v0.1.0...v0.1.1`. The compare view is the complete list of changes between two releases.
 
+## From 0.3 to 0.4 (unreleased)
+
+**Without the control plane, nothing changes in behaviour.** It is off unless you turn it on, and off means no extra keys, connections, threads or log handlers.
+
+New:
+
+- An optional [control plane](/guide/control-plane): `Control(mode="relay")` or `RILLKIT_CONTROL=relay`, with [`rillkit-server`](/guide/server) and its [dashboard](/guide/dashboard). It needs `pip install "rillkit[control]"`.
+- A [config file](/guide/configuration#config-file) (`RILLKIT_CONFIG`), and `RILLKIT_TENANT` and `RILLKIT_KEY_PREFIX`, which imply hash-tagged keys.
+- `subscribe(..., concurrency=n)`: several consumer loops per stream.
+- `Broker.replay_dlq_entries`, `delete_dlq_entries`, `purge_dlq` and `create_group`.
+- [`TraceContext`](/reference/middleware#tracecontext) (W3C `traceparent` across streams) and [`LogCapture`](/reference/middleware#logcapture) (per-message logs), as middleware you can use without the control plane too.
+- Attempt timings in telemetry (`attempts_total`, `wait_ms_total`, `work_ms_total`), shown as the dashboard's **Time per message** chart: queue wait against handler time, for finding the bottleneck of a stream.
+- `Control(trace_records=True)` / `RILLKIT_TRACE_RECORDS`, `broker.control.trace(trace_id)` and **View trace** on the dashboard: every handler attempt of one trace, across streams, kept for an hour. Metadata only, never payloads or exception text.
+- `Settings(max_connections=...)` / `RILLKIT_MAX_CONNECTIONS`: the client connection-pool cap. redis-py 8 defaults it to **100**, which a producer with many threads (or a consumer with more than 100 lanes) can exhaust; raise it to peak concurrent commands plus headroom.
+- Heartbeats are now coalesced: a consumer writes its heartbeat at the top of the loop and after messages, but at most once every `min(5 s, max(0.5 s, heartbeat_ttl/3))` instead of after every message. Liveness and `active_workers` are unchanged; it removes three Redis commands per message. A handler that runs longer than `heartbeat_ttl` still looks gone, as before.
+- `Broker.publish_many(stream, bodies)`: several entries in one pipeline, with middleware (and `TraceContext`) applied per entry. Use it for high publish rates; `publish` is unchanged.
+- `rillkit-server` serves `GET /api/metrics` for Prometheus (per tenant fleet gauges), and caches each tenant's overview for a second, with a single build at a time, so large fleets do not multiply overview work.
+- The autoscaler now sizes from the observed arrival rate as well as lag. A stream that is keeping up at zero lag stays at its current worker count instead of dropping to `min_workers` and oscillating; it scales down when the rate actually falls. `last_decision` now includes the rate. A new autoscaler leader seeds the rate and per-worker capacity from the latest samples, so a failover does not restart the estimate from zero.
+- `rillkit-server` is published as `ghcr.io/nimzymaina/rillkit-server`, with a no-clone Compose file and installer under `deploy/`. Running it needs Postgres and nothing else; see [Running the server](/guide/server#deploy-it).
+
+**License.** From 0.4 the SDK is licensed under the Apache License 2.0; releases up to and including 0.3.0 stay MIT. Apache 2.0 is permissive like MIT, and adds an explicit patent grant: nothing changes in how you may use it. `rillkit-server` and the dashboard are a separate project in the same repository, under FSL-1.1-ALv2 (see [the server's license](/guide/server#license)).
+
+For ACL users (several tenants on one server): a managed worker also needs `+expire`, now part of the [documented rule](/guide/keys#several-tenants-on-one-server).
+
 ## From 0.2 to 0.3
 
 **Single-server users with the default keys: nothing changes.** Stream, DLQ, heartbeat and `Idempotent` keys are identical.

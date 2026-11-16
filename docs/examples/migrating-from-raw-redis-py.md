@@ -89,7 +89,7 @@ The same two messages were processed. The group creation, the loop, JSON decodin
 | --- | --- |
 | `r.xadd(S, {"data": json.dumps(x)})` | `broker.publish(S, x)`. The wire format is identical, so mixed old and new producers and consumers keep working. |
 | `xgroup_create(..., mkstream=True)` and `BUSYGROUP` handling | automatic, with `group_start_id` (`"0"` by default) |
-| `xreadgroup(..., ">")` loop | `@broker.subscribe(...)`, one thread per handler |
+| `xreadgroup(..., ">")` loop | `@broker.subscribe(...)`, one lane (thread) per handler by default; `concurrency=n` for more |
 | `xack` after success | `AckPolicy.NACK_ON_ERROR` (default) |
 | a hand-written `XAUTOCLAIM`/`XCLAIM` sweep | `claim_idle_ms`, `max_retries`, `backoff` |
 | a `failed` stream | `<stream>-dlq`, with `x-` context fields, and `replay_dlq` |
