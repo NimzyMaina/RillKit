@@ -41,6 +41,7 @@ def test_browsing_is_private_unless_the_worker_allows_it(api, tenant, api_key, w
     assert page["payloads"] is False and entry["fields"] is None
     assert entry["size"] > 0 and entry["traceparent"].startswith("00-")
     assert wait_until(lambda: messages(api, tenant)["messages"][0]["status"] == "acked")
+    assert wait_until(lambda: overview(api, tenant)["streams"])
     caps = overview(api, tenant)["streams"][0]["capabilities"]
     assert caps == {"inspect_messages": False, "capture_logs": False, "trace_records": False}
 
