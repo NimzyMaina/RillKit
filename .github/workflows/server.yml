@@ -1,0 +1,68 @@
+name: Server
+
+# rillkit-server (server/), tested end to end with the Python SDK it imports and real workers
+# connected over the Relay. Also builds the Docker image, which compiles the dashboard into it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "sdks/python/**"
+      - "spec/**"
+      - "dashboard/**"
+      - "deploy/**"
+      - ".github/workflows/server.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - "sdks/python/**"
+      - "spec/**"
+      - "dashboard/**"
+      - "deploy/**"
+      - ".github/workflows/server.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5439:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6390:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          working-directory: server
+          python-version: "3.12"
+      - run: uv sync --group dev
+      - run: uv run ruff check src tests
+      - run: uv run mypy src
+      - run: uv run pytest -q
+
+  image:
+    runs-on: ubuntu-latest
+    env:
+      RILLKIT_SERVER_DATABASE_URL: postgresql://user:pass@db.example.com:5432/rillkit
+      RILLKIT_SERVER_ADMIN_TOKEN: 0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the deployment files
+        run: |
+          bash -n deploy/install.sh
+          docker compose -f deploy/compose.yaml config >/dev/null
+          docker compose -f deploy/demo.yaml config >/dev/null
+      - run: docker build -f server/Dockerfile -t rillkit/server:ci .
+      - run: docker build -f examples/demo/Dockerfile -t rillkit/demo:ci .
