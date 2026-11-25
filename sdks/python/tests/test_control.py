@@ -518,7 +518,17 @@ def test_trace_records_capture_each_attempt_and_its_outcome(node, r, name):
         worker.start()
         worker.publish(stream, {"n": 1})
         worker.publish(stream, {"n": 2, "fail": True})
-        assert wait_until(lambda: r.xlen(worker.keys.dlq(stream)) == 1, 10)
+
+        def recorded() -> bool:
+            # The dead-letter trace record is written after the DLQ entry: wait for both.
+            trace_id = traces.get(2)
+            return (
+                trace_id is not None
+                and r.xlen(worker.keys.dlq(stream)) == 1
+                and len(worker.control.trace(trace_id)["records"]) == 2
+            )
+
+        assert wait_until(recorded, 10)
         records = worker.control.trace(traces[2])["records"]
         assert [(x["delivery"], x["outcome"]) for x in records] == [
             (1, "error"), (2, "dead_letter")]
