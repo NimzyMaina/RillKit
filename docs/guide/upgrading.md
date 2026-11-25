@@ -4,6 +4,16 @@
 
 The version picker in the top bar switches between the latest docs and the docs of every release, keeping you on the same page when it exists there. [All versions](/versions) lists each release with its tag, its docs, the release notes when there are any, and a GitHub compare link to the release before it, such as `https://github.com/NimzyMaina/RillKit/compare/v0.1.0...v0.1.1`. The compare view is the complete list of changes between two releases.
 
+## From 0.4.1 to 0.4.2
+
+New: `idle_timeout` on `subscribe()` stops an ephemeral worker after a period
+with no messages and nothing in flight, for scale-to-zero jobs on GitHub
+Actions, Cloud Run Jobs, Kubernetes Jobs and Fly Machines. See
+[Ephemeral workers](/guide/lifecycle#ephemeral-workers-idle-timeout).
+
+`block_ms` must now be at least 1. `0` used to mean `BLOCK 0`, which blocks
+forever. Nothing changes unless you set either option.
+
 ## From 0.4.0 to 0.4.1
 
 `rillkit.__version__` reports the installed package version again. 0.4.0 was
