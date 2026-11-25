@@ -1,5 +1,7 @@
 import inspect
 import logging
+import math
+import numbers
 import os
 import socket
 import threading
@@ -84,6 +86,20 @@ def queue_wait_ms(published_ms: float, started_ms: float) -> float:
     return max(0.0, started_ms - published_ms)
 
 
+def idle_expired(remaining_s: Optional[float], in_flight: int) -> bool:
+    """Whether an idle subscription should stop now: its idle window is used up and no lane
+    has work in flight. ``remaining_s`` is None when ``idle_timeout`` is off (vectors)."""
+    return remaining_s is not None and remaining_s <= 0 and in_flight == 0
+
+
+def idle_read_block_ms(remaining_s: float, block_ms: int, idle_timeout_s: float) -> int:
+    """The ``BLOCK`` for one read while ``idle_timeout`` is on (vectors): never 0, which blocks
+    forever in Redis, and never past the remaining idle time, or the full timeout while another
+    lane still has work in flight."""
+    cap_s = remaining_s if remaining_s > 0 else idle_timeout_s
+    return max(1, min(block_ms, int(cap_s * 1000)))
+
+
 def dead_letter_entry(
     fields: dict[str, str], msg_id: str, stream: str, group: str, error: str, deliveries: int
 ) -> dict[str, str]:
@@ -156,11 +172,21 @@ class Subscriber:
         heartbeat_ttl: int = 60,
         group_start_id: str = "0",
         concurrency: int = 1,
+        idle_timeout: Optional[float] = None,
     ) -> None:
         if not stream.group:
             raise ValueError(f"stream {stream.name!r} needs a group to be consumed")
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1")
+        if block_ms < 1:
+            raise ValueError("block_ms must be at least 1")
+        if idle_timeout is not None and (
+            isinstance(idle_timeout, bool)
+            or not isinstance(idle_timeout, numbers.Real)
+            or not math.isfinite(idle_timeout)
+            or idle_timeout <= 0
+        ):
+            raise ValueError("idle_timeout must be positive")
         self.broker = broker
         self.stream = stream
         self.group: str = stream.group
@@ -182,6 +208,7 @@ class Subscriber:
         self._last_beat: dict[str, float] = {}
         self.group_start_id = group_start_id
         self.concurrency = concurrency
+        self.idle_timeout = idle_timeout
         self._plan = _plan(handler)
         self._stop = threading.Event()
         # Lanes are consumer loops, each with its own consumer name (lane 0 uses ``consumer``).
@@ -192,6 +219,7 @@ class Subscriber:
         self._lanes_lock = threading.Lock()
         self._target = 0
         self._counter_lock = threading.Lock()
+        self._last_activity: Optional[float] = None
         self.in_flight = 0
         self.processed = 0
         # counters since start, reported in telemetry (spec 5.1): each handler run counts once
@@ -291,8 +319,23 @@ class Subscriber:
             if "BUSYGROUP" not in str(e):
                 raise
 
+    def _touch_activity(self) -> None:
+        with self._counter_lock:
+            self._last_activity = time.monotonic()
+
+    def _idle_state(self) -> tuple[Optional[float], int]:
+        """Remaining idle seconds before exit (None if ``idle_timeout`` is off) and in-flight."""
+        with self._counter_lock:
+            if self.idle_timeout is None:
+                return None, self.in_flight
+            now = time.monotonic()
+            if self._last_activity is None:
+                self._last_activity = now
+            return self.idle_timeout - (now - self._last_activity), self.in_flight
+
     def start(self) -> None:
         self._stop.clear()
+        self._touch_activity()
         self.reconcile()
 
     def reconcile(self) -> None:
@@ -300,7 +343,11 @@ class Subscriber:
         they already read, then deregister. ``DRAINING`` means zero lanes."""
         state, lanes, _, _ = self._desired()
         with self._lanes_lock:
+            had_live = any(t.is_alive() for t in self._lanes.values())
             self._target = 0 if state == "DRAINING" or self._stop.is_set() else lanes
+            if self._target > 0 and not had_live:
+                # Exiting DRAINING or starting fresh gives the subscriber a full idle window.
+                self._touch_activity()
             for index in range(self._target):
                 thread = self._lanes.get(index)
                 if thread is not None and thread.is_alive():
@@ -369,12 +416,25 @@ class Subscriber:
                     # paused, in maintenance or draining: in-flight messages are done, so wait
                     # for the next change, beating now and then to stay visible
                     assert control is not None
+                    self._touch_activity()
                     control.wait(version, max(1.0, self.heartbeat_ttl / 3))
+                    self._touch_activity()
                     continue
                 try:
+                    read_block_ms: Optional[int] = block_ms
+                    if self.idle_timeout is not None:
+                        remaining, in_flight = self._idle_state()
+                        assert remaining is not None
+                        if idle_expired(remaining, in_flight):
+                            if self._drain_or_stop(consumer, count):
+                                break
+                            continue
+                        read_block_ms = idle_read_block_ms(
+                            remaining, block_ms, self.idle_timeout
+                        )
                     for msg in self._claim(consumer, count):
                         self._process(msg)
-                    for msg in self._read(consumer, count, block_ms):
+                    for msg in self._read(consumer, count, read_block_ms):
                         if self._stop.is_set():
                             break  # unread leftovers stay pending, claimed after the idle time
                         self._process(msg)
@@ -393,6 +453,33 @@ class Subscriber:
             log.info(
                 "consumer stopped | stream: %s | consumer: %s", self.stream.name, consumer
             )
+
+    def _drain_or_stop(self, consumer: str, count: int) -> bool:
+        """Final non-blocking poll when idle; sets ``_stop`` and returns True if still empty."""
+        if self._stop.is_set():
+            return True
+        claimed = self._claim(consumer, count)
+        for msg in claimed:
+            self._process(msg)
+        if self._stop.is_set():
+            return True
+        read = self._read(consumer, count, block_ms=0)
+        for msg in read:
+            if self._stop.is_set():
+                break
+            self._process(msg)
+        if claimed or read:
+            return False
+        remaining, in_flight = self._idle_state()
+        if idle_expired(remaining, in_flight):
+            if not self._stop.is_set():
+                log.info(
+                    "consumer idle timeout reached (%.3fs) | stream: %s | consumer: %s",
+                    self.idle_timeout, self.stream.name, consumer,
+                )
+                self._stop.set()
+            return True
+        return False
 
     def _loop_error(self, e: Exception) -> None:
         log.error("consumer loop error, retrying in %s s: %s", RETRY_BACKOFF_SECONDS, e)
@@ -438,13 +525,21 @@ class Subscriber:
         block_ms: Optional[int] = None,
     ) -> list[Message]:
         consumer = consumer or self.consumer
+        # BLOCK 0 in Redis/Valkey means block forever; pass block=None for a non-blocking poll.
+        block = (
+            None if block_ms is not None and block_ms <= 0
+            else (self._block_ms if block_ms is None else block_ms)
+        )
         result: Any = self.client.xreadgroup(
             self.group, consumer, {self.stream_key: ">"},
-            count=count or self.count, block=block_ms or self._block_ms,
+            count=count or self.count, block=block,
         )
-        return [
+        messages = [
             self._message(i, f, 1, consumer) for _, entries in result or [] for i, f in entries
         ]
+        if messages:
+            self._touch_activity()
+        return messages
 
     def _required_idle_ms(self, times_delivered: int) -> float:
         return retry_wait_ms(self.claim_idle_ms, self.backoff, self.max_backoff_ms,
@@ -469,6 +564,8 @@ class Subscriber:
         claimed: Any = self.client.xclaim(
             self.stream_key, self.group, consumer, self.claim_idle_ms, list(due)
         )
+        if claimed:
+            self._touch_activity()
         messages = []
         for id, raw in claimed:
             if raw is None:  # entry was trimmed from the stream while pending
@@ -525,6 +622,7 @@ class Subscriber:
             with self._counter_lock:
                 self.in_flight -= 1
                 self.processed += 1
+                self._last_activity = time.monotonic()
                 self.bytes_total += size
                 if ok:
                     self.succeeded_total += 1

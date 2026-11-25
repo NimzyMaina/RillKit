@@ -27,7 +27,7 @@ Each file is `{"description": ..., "cases": [...]}`, except `data_plane.json` (s
 | `desired_state.json` | Combining the global, stream and node state hashes for one subscription (spec 2.2) | `global`, `stream`, `node` (hashes of strings, or null), `subscription` → `expect`; null fields mean the value given in code |
 | `directives.json` | Validating a directive and what applying it writes (spec 2.1, 5.2) | `builder`, `directive` → `expect`: `ACCEPTED` with the state `key`, wakeup `channel` and `fields` (or, for the actions `EXECUTE_REPLAY`, `DELETE_DLQ` and `CREATE_STREAM`, the `stream`, `group` and `action` to run), or `REJECTED` |
 | `traceparent.json` | Parsing W3C `traceparent` values read from entries | `traceparent` → `expect` (trace id, span id, flags) or null for invalid |
-| `data_plane.json` | Retry timing and exhaustion, DLQ entries, replay, lane consumer names, queue wait ([data-plane.md](data-plane.md)) | Grouped by rule rather than one `cases` list: `retry_wait`, `retries_exhausted`, `dead_letter`, `replay`, `lane_consumer`, `queue_wait` |
+| `data_plane.json` | Retry timing and exhaustion, DLQ entries, replay, lane consumer names, queue wait, idle exit ([data-plane.md](data-plane.md)) | Grouped by rule rather than one `cases` list: `retry_wait`, `retries_exhausted`, `dead_letter`, `replay`, `lane_consumer`, `queue_wait`, `idle_expired`, `idle_block` |
 
 Rules the vectors pin down that are easy to get wrong in a new language:
 

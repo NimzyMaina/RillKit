@@ -1,5 +1,5 @@
 {
-  "description": "Data-plane rules (spec/data-plane.md): retry timing, retry exhaustion, DLQ entries, replay, lane consumer names, queue wait.",
+  "description": "Data-plane rules (spec/data-plane.md): retry timing, retry exhaustion, DLQ entries, replay, lane consumer names, queue wait, idle exit.",
   "retry_wait": [
     {
       "claim_idle_ms": 60000,
@@ -290,6 +290,82 @@
       "published_ms": 1794669071538,
       "started_ms": 1794669671538,
       "expect_ms": 600000.0
+    }
+  ],
+  "idle_expired": [
+    {
+      "remaining_s": null,
+      "in_flight": 0,
+      "expect": false
+    },
+    {
+      "remaining_s": 0.5,
+      "in_flight": 0,
+      "expect": false
+    },
+    {
+      "remaining_s": 0.0,
+      "in_flight": 0,
+      "expect": true
+    },
+    {
+      "remaining_s": -0.25,
+      "in_flight": 0,
+      "expect": true
+    },
+    {
+      "remaining_s": 0.0,
+      "in_flight": 1,
+      "expect": false
+    },
+    {
+      "remaining_s": -3.0,
+      "in_flight": 2,
+      "expect": false
+    }
+  ],
+  "idle_block": [
+    {
+      "remaining_s": 2.0,
+      "block_ms": 5000,
+      "idle_timeout_s": 5.0,
+      "expect_ms": 2000
+    },
+    {
+      "remaining_s": 0.2,
+      "block_ms": 5000,
+      "idle_timeout_s": 2.0,
+      "expect_ms": 200
+    },
+    {
+      "remaining_s": 0.75,
+      "block_ms": 5000,
+      "idle_timeout_s": 2.0,
+      "expect_ms": 750
+    },
+    {
+      "remaining_s": 0.0001,
+      "block_ms": 5000,
+      "idle_timeout_s": 1.0,
+      "expect_ms": 1
+    },
+    {
+      "remaining_s": 0.0,
+      "block_ms": 5000,
+      "idle_timeout_s": 1.0,
+      "expect_ms": 1000
+    },
+    {
+      "remaining_s": -0.5,
+      "block_ms": 300,
+      "idle_timeout_s": 2.0,
+      "expect_ms": 300
+    },
+    {
+      "remaining_s": 0.5,
+      "block_ms": 100,
+      "idle_timeout_s": 5.0,
+      "expect_ms": 100
     }
   ]
 }

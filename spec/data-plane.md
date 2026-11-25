@@ -62,6 +62,17 @@ Each lane repeats, until it is stopped:
   pending and are claimed later (section 5.1); they are never lost.
 - The block time MUST stay below the client's socket read timeout: RillKit uses
   `min(block_ms, socket_timeout - 1 s)`, and at least 100 ms.
+- When `idle_timeout` (seconds, positive) is set on a subscription, all lanes of that subscription
+  share one activity timestamp updated whenever a message is claimed, read, or finishes
+  processing, and frozen while the desired control-plane state is not `RUNNING`. While
+  `idle_timeout` is active, a lane MUST clamp `BLOCK` to at most the remaining idle time (or
+  `idle_timeout` while another lane still has work in flight) and to at least 1 ms, which can be
+  below the 100 ms socket-timeout floor above; it MUST NOT send `BLOCK 0` (which blocks forever).
+  Once idle for `idle_timeout` with zero in-flight messages, a lane performs one non-blocking
+  claim and read (`XREADGROUP` without `BLOCK`), and if still empty with zero in-flight messages,
+  stops all lanes of the subscription cleanly so each lane deregisters its heartbeat and consumer
+  registry entry. A nacked message waiting for its retry backoff is not activity: the subscription
+  may stop before it is due, and another consumer claims it once it is.
 - A loop-level error (connection lost, unexpected reply) is logged, and the lane waits 5 s and
   continues. It MUST NOT exit the process.
 
