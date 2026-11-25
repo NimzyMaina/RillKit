@@ -1,8 +1,11 @@
 import os
 import signal
 import threading
+import time
 
-from helpers import fast, hk, pending, read_count, sk, wait_until
+import pytest
+
+from helpers import fast, hk, keep_server_awake, pending, read_count, settle, sk, wait_until
 from rillkit import Broker, Message
 
 
@@ -374,3 +377,154 @@ def test_registry_ignores_expired_entries_and_beats_prune_them(broker: Broker, r
     broker.start()
     assert wait_until(lambda: r.zscore(ck(name, "g"), "crashed") is None)  # pruned by a beat
     assert broker.active_workers(name, "g") == ["alive-elsewhere", "worker-7"]
+
+
+@pytest.mark.parametrize("bad", [0, -1, -0.5, float("nan"), float("inf"), "5", True, False])
+def test_idle_timeout_validation(name, bad):
+    broker = Broker(client=object())
+    with pytest.raises(ValueError, match="idle_timeout"):
+        broker.subscribe(name, group="g", idle_timeout=bad)(lambda body: None)
+
+
+@pytest.mark.parametrize("bad", [0, -1])
+def test_block_ms_must_be_at_least_one(name, bad):
+    broker = Broker(client=object())
+    with pytest.raises(ValueError, match="block_ms"):
+        broker.subscribe(name, group="g", block_ms=bad)(lambda body: None)
+
+
+def test_idle_timeout_stops_empty_worker_and_runs_shutdown_hooks(broker: Broker, r, name):
+    events: list[str] = []
+    _register_hooks(broker, events)
+
+    # Two lanes prove every lane deregisters. Large block_ms proves the loop clamps
+    # XREADGROUP below idle_timeout.
+    @broker.subscribe(
+        name, group="g", consumer="w", concurrency=2, block_ms=5000, idle_timeout=0.3,
+    )
+    def handle(body): ...
+
+    started = time.monotonic()
+    with keep_server_awake(r):
+        broker.run(handle_signals=False, shutdown_timeout=5)
+    elapsed = time.monotonic() - started
+    assert elapsed < 2.5
+    assert events == EXPECTED
+    assert not broker.subscribers[0].is_alive()
+    assert Broker(client=r).active_workers(name, "g") == []
+
+
+def test_idle_timeout_resets_on_activity_then_exits(broker: Broker, r, name):
+    got: list[int] = []
+
+    @broker.subscribe(name, group="g", consumer="w", block_ms=5000, idle_timeout=0.35)
+    def handle(body):
+        got.append(body["n"])
+
+    broker.publish(name, {"n": 0})
+    with keep_server_awake(r):
+        t = threading.Thread(target=broker.run, kwargs={"handle_signals": False}, daemon=True)
+        t.start()
+        assert wait_until(lambda: got == [0])
+        settle(0.15)
+        broker.publish(name, {"n": 1})
+        assert wait_until(lambda: got == [0, 1])
+        settle(0.15)
+        broker.publish(name, {"n": 2})
+        assert wait_until(lambda: got == [0, 1, 2])
+        t.join(5)
+        assert not t.is_alive()
+    assert pending(r, name) == 0
+
+
+def test_idle_timeout_waits_for_slow_in_flight_handler_across_lanes(broker: Broker, r, name):
+    in_slow = threading.Event()
+    release = threading.Event()
+    done: list[int] = []
+
+    @broker.subscribe(
+        name, group="g", consumer="w", concurrency=2, count=1, block_ms=5000, idle_timeout=0.3,
+    )
+    def handle(body):
+        if body["n"] == 0:
+            in_slow.set()
+            assert release.wait(10)
+        done.append(body["n"])
+
+    broker.publish(name, {"n": 0})
+    broker.publish(name, {"n": 1})
+    with keep_server_awake(r):
+        t = threading.Thread(target=broker.run, kwargs={"handle_signals": False}, daemon=True)
+        t.start()
+        assert in_slow.wait(5)
+        # Longer than idle_timeout: the idle lane must not stop the subscriber while in_flight > 0.
+        settle(0.45)
+        assert t.is_alive()
+        assert broker.subscribers[0].is_alive()
+        release.set()
+        t.join(5)
+        assert not t.is_alive()
+    assert sorted(done) == [0, 1]
+    assert pending(r, name) == 0
+
+
+def test_idle_timeout_multi_subscriber_keeps_broker_alive(broker: Broker, r, name):
+    idle_stream = f"{name}-idle"
+    steady_stream = f"{name}-steady"
+    got_steady: list[int] = []
+    started = threading.Event()
+    broker.after_startup(started.set)
+
+    @broker.subscribe(idle_stream, group="g", consumer="idle-w", block_ms=5000, idle_timeout=0.25)
+    def handle_idle(body): ...
+
+    @broker.subscribe(steady_stream, group="g", consumer="steady-w", **fast())
+    def handle_steady(body):
+        got_steady.append(body["n"])
+
+    with keep_server_awake(r):
+        t = threading.Thread(target=broker.run, kwargs={"handle_signals": False}, daemon=True)
+        t.start()
+        assert started.wait(5)
+        assert wait_until(lambda: not broker.subscribers[0].is_alive())
+        assert wait_until(lambda: broker.active_workers(idle_stream, "g") == [])
+        assert t.is_alive()
+        assert broker.subscribers[1].is_alive()
+        broker.publish(steady_stream, {"n": 7})
+        assert wait_until(lambda: got_steady == [7])
+        broker.stop(timeout=5)
+        t.join(5)
+        assert not t.is_alive()
+
+
+def test_idle_timeout_leaves_failed_retry_for_the_next_worker(make_broker, r, name):
+    first = make_broker()
+    runs: list[int] = []
+
+    @first.subscribe(
+        name, group="g", consumer="w", block_ms=5000,
+        claim_idle_ms=2000, max_retries=3, idle_timeout=0.3,
+    )
+    def failing(body):
+        runs.append(body["n"])
+        raise RuntimeError("boom")
+
+    first.publish(name, {"n": 1})
+    with keep_server_awake(r):
+        first.start()
+        # The idle exit comes before claim_idle_ms, so the nack is still pending: the retry
+        # needs another worker to start and claim it (docs/guide/lifecycle.md).
+        assert wait_until(lambda: not first.subscribers[0].is_alive(), 5)
+    assert runs == [1]
+    assert pending(r, name) == 1
+
+    second = make_broker()
+    got: list[int] = []
+
+    @second.subscribe(name, group="g", consumer="w2", block_ms=100, claim_idle_ms=2000)
+    def succeeding(body):
+        got.append(body["n"])
+
+    with keep_server_awake(r):
+        second.start()
+        assert wait_until(lambda: got == [1] and pending(r, name) == 0, 10)

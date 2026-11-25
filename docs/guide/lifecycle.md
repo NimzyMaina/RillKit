@@ -89,6 +89,22 @@ broker.run(handle_signals=False)      # you install your own signal handlers
 
 `start()` returns immediately because the consumers are daemon threads: if your main thread exits, they die with it. Keep the main thread alive yourself, or use `run()`.
 
+## Ephemeral workers (`idle_timeout`)
+
+For scale-to-zero jobs (GitHub Actions, Cloud Run Jobs, Kubernetes Jobs), pass `idle_timeout` (in seconds) to `@broker.subscribe(...)`:
+
+```python
+@broker.subscribe(Stream("tasks", group="g"), idle_timeout=60.0)
+def handle(task: dict):
+    ...
+
+broker.run()  # exits cleanly once idle for 60 s with nothing in flight
+```
+
+Activity is tracked across all `concurrency` lanes of the subscriber: while any lane is processing an in-flight message or a non-`RUNNING` control state is active, the subscriber stays alive. Once idle for `idle_timeout` with zero in-flight messages, it runs one final non-blocking check, deregisters its heartbeat, and exits; `broker.run()` runs shutdown hooks and returns once every subscriber has stopped.
+
+A message that failed and is waiting for its retry (after `claim_idle_ms` and the backoff) does not keep the worker alive. The subscriber can stop before that retry is due, so the retry runs only when another worker starts and claims it. Messages already fetched but not handled are left pending in the same way. In a scale-to-zero setup, make whatever starts workers count pending entries (`XPENDING`) as well as stream lag, or a failed job can wait for the next scheduled sweep.
+
 ## Signals and graceful shutdown
 
 `run()` installs handlers for `SIGINT` and `SIGTERM` (only when called from the main thread):

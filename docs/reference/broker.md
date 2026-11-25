@@ -63,6 +63,7 @@ Broker.subscribe(
     heartbeat_ttl: int = 60,
     group_start_id: str = "0",
     concurrency: int = 1,
+    idle_timeout: Optional[float] = None,
 ) -> Callable[[Callable], Callable]
 ```
 
@@ -77,7 +78,7 @@ A decorator factory. The decorated function is returned unchanged. Raises `Value
 | `claim_idle_ms` | `60000` | Idle time before a pending message is retried. Must exceed your slowest handler. |
 | `backoff` | `1.0` | Multiplier per retry: required idle = `min(claim_idle_ms * backoff ** (deliveries - 1), max_backoff_ms)`. |
 | `max_backoff_ms` | `900000` | Cap on the required idle time (15 minutes). |
-| `block_ms` | `5000` | Milliseconds one `XREADGROUP` blocks. |
+| `block_ms` | `5000` | Milliseconds one `XREADGROUP` blocks. Must be at least 1. |
 | `count` | `10` | Entries per read and pending entries inspected per claim pass. |
 | `middlewares` | `()` | Middleware for this subscriber only, inside the broker-wide ones. |
 | `consumer` | `<group>-<hostname>-<pid>` | Consumer name. |
@@ -85,6 +86,7 @@ A decorator factory. The decorated function is returned unchanged. Raises `Value
 | `heartbeat_ttl` | `60` | Heartbeat key TTL in seconds. |
 | `group_start_id` | `"0"` | Start position for a newly created group. `"$"` means only new entries. |
 | `concurrency` | `1` | Consumer loops (threads) for this stream, named `<consumer>`, `<consumer>-1`, ... A control plane can change it while running. |
+| `idle_timeout` | `None` | Seconds of inactivity (no messages and zero in-flight work across lanes) before the subscriber stops itself cleanly. Raises `ValueError` if not positive. A nacked message waiting for its retry does not keep it alive. |
 
 See [Consuming](/guide/consuming) for handler signature rules.
 
@@ -142,7 +144,7 @@ Each takes a function with no arguments, registers it and returns it, so it work
 | --- | --- |
 | `start() -> None` | Runs `on_startup` hooks, pings the server, creates the groups (`XGROUP CREATE ... MKSTREAM`), reads the desired state if the control plane is on (so a paused stream is never polled), starts the consumer threads (`concurrency` per subscriber), starts the control plane's threads, runs `after_startup` hooks, and returns. |
 | `stop(timeout: Optional[float] = None) -> None` | Asks consumers to stop, joins each thread for up to `timeout` seconds (`None` waits forever), stops the control plane (closing its Relay connection and removing the node heartbeat), runs `on_shutdown`, closes the client, runs `after_shutdown`. Safe to call more than once and from another thread: the shutdown work happens once per start. |
-| `run(handle_signals: bool = True, shutdown_timeout: Optional[float] = None) -> None` | `start()`, then blocks until SIGINT or SIGTERM (first signal: graceful, second: `sys.exit(1)`), until `stop()` is called, or until all consumer threads have ended; then `stop(shutdown_timeout)`. Signal handlers are installed only from the main thread and the previous handlers are restored afterwards. |
+| `run(handle_signals: bool = True, shutdown_timeout: Optional[float] = None) -> None` | `start()`, then blocks until SIGINT or SIGTERM (first signal: graceful, second: `sys.exit(1)`), until `stop()` is called, or until all consumer threads have ended (for example when every subscriber sets `idle_timeout` and goes idle); then `stop(shutdown_timeout)`. Signal handlers are installed only from the main thread and the previous handlers are restored afterwards. |
 
 ## Operations
 

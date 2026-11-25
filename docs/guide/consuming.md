@@ -19,7 +19,7 @@ def handle_order(order: dict):
 | `claim_idle_ms` | `60000` | How long a pending message must sit idle before it is retried. Must be longer than your slowest handler. |
 | `backoff` | `1.0` | Multiplier applied to the idle time on each further retry. `1.0` means constant. |
 | `max_backoff_ms` | `900000` | Upper limit for the (backed-off) idle time. |
-| `block_ms` | `5000` | How long one `XREADGROUP` waits for new entries. It is also the longest a stop request can wait. |
+| `block_ms` | `5000` | How long one `XREADGROUP` waits for new entries. It is also the longest a stop request can wait. Must be at least 1. |
 | `count` | `10` | Entries fetched per read, and pending entries inspected per claim pass. |
 | `middlewares` | `()` | Middleware for this subscription only, run inside the broker-wide ones. |
 | `consumer` | `<group>-<hostname>-<pid>` | Consumer name. Must be unique per running worker. |
@@ -27,6 +27,7 @@ def handle_order(order: dict):
 | `heartbeat_ttl` | `60` | Seconds before the heartbeat key expires. |
 | `group_start_id` | `"0"` | Where a **new** group starts reading: `"0"` is the beginning of the stream, `"$"` is only entries added from now on. Ignored if the group already exists. |
 | `concurrency` | `1` | Consumer loops (lanes) for this stream, named `<consumer>`, `<consumer>-1`, ... A control plane can change it while running. |
+| `idle_timeout` | `None` | Seconds with no messages and nothing in flight before this subscriber stops cleanly (for scale-to-zero / ephemeral workers). A message waiting for its retry does not count. |
 
 ## Handler signature rules
 

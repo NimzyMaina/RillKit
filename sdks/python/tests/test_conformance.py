@@ -15,6 +15,8 @@ from redis.crc import key_slot
 from rillkit import ConfigurationError, Control, HashTagKeys, KeyBuilder, PlainKeys, Stream
 from rillkit.consumer import (
     dead_letter_entry,
+    idle_expired,
+    idle_read_block_ms,
     lane_consumer_name,
     queue_wait_ms,
     replay_entry,
@@ -168,6 +170,17 @@ def test_lane_consumer_name(case):
 def test_queue_wait(case):
     got = queue_wait_ms(case["published_ms"], case["started_ms"])
     assert got == pytest.approx(case["expect_ms"])
+
+
+@pytest.mark.parametrize("case", DATA_PLANE["idle_expired"], ids=str)
+def test_idle_expired(case):
+    assert idle_expired(case["remaining_s"], case["in_flight"]) is case["expect"]
+
+
+@pytest.mark.parametrize("case", DATA_PLANE["idle_block"], ids=str)
+def test_idle_read_block_ms(case):
+    got = idle_read_block_ms(case["remaining_s"], case["block_ms"], case["idle_timeout_s"])
+    assert got == case["expect_ms"]
 
 
 # protocol schemas (spec 5)

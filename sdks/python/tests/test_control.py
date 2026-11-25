@@ -518,7 +518,17 @@ def test_trace_records_capture_each_attempt_and_its_outcome(node, r, name):
         worker.start()
         worker.publish(stream, {"n": 1})
         worker.publish(stream, {"n": 2, "fail": True})
-        assert wait_until(lambda: r.xlen(worker.keys.dlq(stream)) == 1, 10)
+
+        def recorded() -> bool:
+            # The dead-letter trace record is written after the DLQ entry: wait for both.
+            trace_id = traces.get(2)
+            return (
+                trace_id is not None
+                and r.xlen(worker.keys.dlq(stream)) == 1
+                and len(worker.control.trace(trace_id)["records"]) == 2
+            )
+
+        assert wait_until(recorded, 10)
         records = worker.control.trace(traces[2])["records"]
         assert [(x["delivery"], x["outcome"]) for x in records] == [
             (1, "error"), (2, "dead_letter")]
@@ -633,3 +643,39 @@ def test_trace_order_follows_parent_spans():
     quick = {"span_id": "e", "parent_span_id": "caller", "started_at": 10,
              "started_us": 10_000_100, "published_at": 10}
     assert [r["span_id"] for r in _trace_order([slow, quick])] == ["e", "d"]
+
+
+def test_idle_timeout_excludes_paused_and_resets_after_draining(node, admin, r, name):
+    worker = node()
+    stream = Stream(name, group="g")
+    got: list[int] = []
+
+    @worker.subscribe(stream, consumer="w", block_ms=5000, idle_timeout=0.35)
+    def handle(body: dict) -> None:
+        got.append(body["n"])
+
+    sub = worker.subscribers[0]
+    with keep_server_awake(r):
+        t = threading.Thread(target=worker.run, kwargs={"handle_signals": False}, daemon=True)
+        t.start()
+        assert wait_until(lambda: worker.active_workers(stream) == ["w"], 5)
+
+        apply_ok(admin, directive("SET_STATE", state="PAUSED"))
+        assert wait_until(lambda: worker.control.desired().state == "PAUSED", 5)
+        settle(0.5)  # longer than idle_timeout; paused workers stay alive
+        assert t.is_alive()
+        assert sub.is_alive()
+
+        apply_ok(admin, directive("SET_STATE", state="DRAINING"))
+        assert wait_until(lambda: sub.lanes == 0, 5)
+        settle(0.45)  # longer than idle_timeout; drained workers wait for RUNNING
+        assert t.is_alive()
+        assert sub.is_alive()
+
+        apply_ok(admin, directive("SET_STATE", state="RUNNING"))
+        assert wait_until(lambda: sub.lanes == 1, 5)
+        worker.publish(stream, {"n": 42})
+        assert wait_until(lambda: got == [42], 5)
+        t.join(5)
+        assert not t.is_alive()
+        assert not sub.is_alive()

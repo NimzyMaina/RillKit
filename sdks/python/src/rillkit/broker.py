@@ -158,11 +158,14 @@ class Broker:
         heartbeat_ttl: int = 60,
         group_start_id: str = "0",
         concurrency: int = 1,
+        idle_timeout: Optional[float] = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Register a handler for a stream. The handler is returned unchanged.
 
         ``concurrency`` runs that many consumer loops (threads) for the stream, named
-        ``<consumer>``, ``<consumer>-1``, ... A control plane can change it at run time."""
+        ``<consumer>``, ``<consumer>-1``, ... A control plane can change it at run time.
+        ``idle_timeout`` stops the subscriber cleanly after that many seconds with no messages
+        and nothing in flight; a nacked message waiting for its retry does not keep it alive."""
         resolved = as_stream(stream)
         if group:
             resolved = Stream(resolved.name, group, resolved.dlq, resolved.maxlen, resolved.codec)
@@ -177,6 +180,7 @@ class Broker:
                 block_ms=block_ms, count=count, middlewares=own,
                 consumer=consumer, heartbeat=heartbeat, heartbeat_ttl=heartbeat_ttl,
                 group_start_id=group_start_id, concurrency=concurrency,
+                idle_timeout=idle_timeout,
             ))
             return func
 
