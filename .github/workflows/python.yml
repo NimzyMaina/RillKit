@@ -25,11 +25,12 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           working-directory: sdks/python
           python-version: "3.9"
+          save-cache: false
       - run: uv sync --group dev
       - run: uv run ruff check src tests
       - run: uv run mypy src
@@ -61,11 +62,12 @@ jobs:
       REDIS_URL: redis://localhost:6379/15
       RILLKIT_TEST_BACKEND: ${{ matrix.backend }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           working-directory: sdks/python
           python-version: ${{ matrix.python-version }}
+          save-cache: ${{ matrix.backend == 'redis' }}
       - run: uv sync --group dev
       - run: uv run pytest -q
 
@@ -83,11 +85,12 @@ jobs:
       RILLKIT_TEST_MODE: cluster
       RILLKIT_TEST_CLUSTER_NODES: 127.0.0.1:7101
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           working-directory: sdks/python
           python-version: "3.12"
+          save-cache: false
       - run: ../../scripts/test-cluster.sh ${{ matrix.backend }} 7101
       - run: uv sync --group dev
       - run: uv run pytest -q
@@ -110,11 +113,12 @@ jobs:
         options: >-
           --health-cmd "valkey-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           working-directory: sdks/python
           python-version: "3.13"
+          save-cache: false
       - run: uv sync --group dev
       - run: uv pip install --upgrade redis valkey
       - run: uv run --no-sync python -c "import redis, valkey; print(redis.__version__, valkey.__version__)"
@@ -129,10 +133,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           working-directory: sdks/python
+          save-cache: false
       - run: uv build
       - run: uvx twine check dist/*
       - name: The valkey extra installs and Redis stays the only hard dependency
