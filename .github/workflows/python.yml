@@ -30,6 +30,7 @@ jobs:
         with:
           working-directory: sdks/python
           python-version: "3.9"
+          save-cache: false
       - run: uv sync --group dev
       - run: uv run ruff check src tests
       - run: uv run mypy src
@@ -66,6 +67,7 @@ jobs:
         with:
           working-directory: sdks/python
           python-version: ${{ matrix.python-version }}
+          save-cache: ${{ matrix.backend == 'redis' }}
       - run: uv sync --group dev
       - run: uv run pytest -q
 
@@ -88,6 +90,7 @@ jobs:
         with:
           working-directory: sdks/python
           python-version: "3.12"
+          save-cache: false
       - run: ../../scripts/test-cluster.sh ${{ matrix.backend }} 7101
       - run: uv sync --group dev
       - run: uv run pytest -q
@@ -115,6 +118,7 @@ jobs:
         with:
           working-directory: sdks/python
           python-version: "3.13"
+          save-cache: false
       - run: uv sync --group dev
       - run: uv pip install --upgrade redis valkey
       - run: uv run --no-sync python -c "import redis, valkey; print(redis.__version__, valkey.__version__)"
@@ -133,6 +137,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           working-directory: sdks/python
+          save-cache: false
       - run: uv build
       - run: uvx twine check dist/*
       - name: The valkey extra installs and Redis stays the only hard dependency
