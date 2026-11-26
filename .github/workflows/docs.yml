@@ -31,18 +31,18 @@ jobs:
     steps:
       # always build latest from main, even when a tag push triggered the run;
       # full history so every release tag is available
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       # Snapshots are immutable; the script keys each one by tag, commit and
       # builder version, and prunes entries it no longer uses.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: .docs-build/cache
           key: docs-snapshots-${{ hashFiles('scripts/build-docs.mjs') }}-${{ github.run_id }}
@@ -56,7 +56,7 @@ jobs:
           releases=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --exclude-drafts --json tagName --jq '[.[].tagName] | join(",")')
           echo "RILLKIT_GH_RELEASES=$releases" >> "$GITHUB_ENV"
       - run: npm run docs:build:versions
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .docs-build/site
@@ -69,4 +69,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
